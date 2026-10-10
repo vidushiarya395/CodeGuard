@@ -1,0 +1,174 @@
+# Narrow CWE groups.
+#
+# Two findings can only be "the same problem" if their CWEs fall in the same group.
+# Groups are kept narrow on purpose: each one covers a single kind of weakness, and
+# the same table is applied to every tool (Semgrep, Bandit, rule checks, LLM).
+#
+# A CWE that is not listed here becomes its own one-CWE group (e.g. "CWE-1234"),
+# so unknown CWEs never get merged with anything else by accident.
+# A finding without any CWE goes to the group "unclassified".
+#
+# Source for every CWE ID: MITRE CWE list, https://cwe.mitre.org/data/definitions/<id>.html
+
+version: 1
+
+groups:
+  - id: os-command-injection
+    name: OS command injection
+    cwes: [CWE-77, CWE-78, CWE-88]
+    source: https://cwe.mitre.org/data/definitions/78.html
+
+  - id: code-injection
+    name: Code injection (eval / exec)
+    cwes: [CWE-94, CWE-95]
+    source: https://cwe.mitre.org/data/definitions/94.html
+
+  - id: sql-injection
+    name: SQL injection
+    cwes: [CWE-89, CWE-564]
+    source: https://cwe.mitre.org/data/definitions/89.html
+
+  - id: ldap-injection
+    name: LDAP injection
+    cwes: [CWE-90]
+    source: https://cwe.mitre.org/data/definitions/90.html
+
+  - id: xpath-injection
+    name: XPath injection
+    cwes: [CWE-643]
+    source: https://cwe.mitre.org/data/definitions/643.html
+
+  - id: template-injection
+    name: Server-side template injection
+    cwes: [CWE-1336]
+    source: https://cwe.mitre.org/data/definitions/1336.html
+
+  - id: xss
+    name: Cross-site scripting
+    cwes: [CWE-79, CWE-80, CWE-83, CWE-116]
+    source: https://cwe.mitre.org/data/definitions/79.html
+
+  - id: path-traversal
+    name: Path traversal
+    cwes: [CWE-22, CWE-23, CWE-36, CWE-73]
+    source: https://cwe.mitre.org/data/definitions/22.html
+
+  - id: unsafe-deserialization
+    name: Unsafe deserialization
+    cwes: [CWE-502]
+    source: https://cwe.mitre.org/data/definitions/502.html
+
+  - id: xml-external-entities
+    name: XML external entities and entity expansion
+    cwes: [CWE-611, CWE-776, CWE-827]
+    source: https://cwe.mitre.org/data/definitions/611.html
+
+  - id: ssrf
+    name: Server-side request forgery
+    cwes: [CWE-918]
+    source: https://cwe.mitre.org/data/definitions/918.html
+
+  - id: open-redirect
+    name: Open redirect
+    cwes: [CWE-601]
+    source: https://cwe.mitre.org/data/definitions/601.html
+
+  - id: hardcoded-credentials
+    name: Hard-coded credentials or keys
+    cwes: [CWE-259, CWE-321, CWE-798]
+    source: https://cwe.mitre.org/data/definitions/798.html
+
+  - id: weak-cryptography
+    name: Broken or weak cryptographic algorithm or key size
+    cwes: [CWE-326, CWE-327, CWE-328]
+    source: https://cwe.mitre.org/data/definitions/327.html
+
+  - id: weak-password-hash
+    name: Password hash with too little effort
+    cwes: [CWE-759, CWE-760, CWE-916]
+    source: https://cwe.mitre.org/data/definitions/916.html
+
+  - id: weak-randomness
+    name: Predictable random numbers in a security context
+    cwes: [CWE-330, CWE-331, CWE-338]
+    source: https://cwe.mitre.org/data/definitions/338.html
+
+  - id: tls-verification
+    name: Missing or disabled TLS certificate checks
+    cwes: [CWE-295, CWE-297]
+    source: https://cwe.mitre.org/data/definitions/295.html
+
+  - id: cleartext-transmission
+    name: Sensitive data sent in cleartext
+    cwes: [CWE-319]
+    source: https://cwe.mitre.org/data/definitions/319.html
+
+  - id: insecure-temp-file
+    name: Insecure temporary file
+    cwes: [CWE-377, CWE-379]
+    source: https://cwe.mitre.org/data/definitions/377.html
+
+  - id: insecure-permissions
+    name: Overly broad file permissions
+    cwes: [CWE-276, CWE-732]
+    source: https://cwe.mitre.org/data/definitions/732.html
+
+  - id: network-exposure
+    name: Service bound to all network interfaces
+    cwes: [CWE-605, CWE-1327]
+    source: https://cwe.mitre.org/data/definitions/1327.html
+
+  - id: debug-exposure
+    name: Debug features left enabled
+    cwes: [CWE-215, CWE-489]
+    source: https://cwe.mitre.org/data/definitions/489.html
+
+  - id: sensitive-info-exposure
+    name: Sensitive information exposed (errors, logs)
+    cwes: [CWE-200, CWE-209, CWE-532]
+    source: https://cwe.mitre.org/data/definitions/200.html
+
+  - id: log-injection
+    name: Log injection
+    cwes: [CWE-117]
+    source: https://cwe.mitre.org/data/definitions/117.html
+
+  - id: csrf
+    name: Cross-site request forgery
+    cwes: [CWE-352]
+    source: https://cwe.mitre.org/data/definitions/352.html
+
+  - id: insecure-cookie
+    name: Cookie without Secure or HttpOnly flag
+    cwes: [CWE-614, CWE-1004]
+    source: https://cwe.mitre.org/data/definitions/614.html
+
+  - id: resource-exhaustion
+    name: Uncontrolled resource use (missing timeouts, limits)
+    cwes: [CWE-400, CWE-770]
+    source: https://cwe.mitre.org/data/definitions/400.html
+
+  - id: redos
+    name: Regular expression denial of service
+    cwes: [CWE-1333]
+    source: https://cwe.mitre.org/data/definitions/1333.html
+
+  - id: improper-error-handling
+    name: Improper handling of errors or exceptional conditions
+    cwes: [CWE-390, CWE-396, CWE-703]
+    source: https://cwe.mitre.org/data/definitions/703.html
+
+  - id: input-validation
+    name: Improper input validation (general)
+    cwes: [CWE-20]
+    source: https://cwe.mitre.org/data/definitions/20.html
+
+  - id: mass-assignment
+    name: Mass assignment
+    cwes: [CWE-915]
+    source: https://cwe.mitre.org/data/definitions/915.html
+
+  - id: vulnerable-dependency
+    name: Known-vulnerable dependency
+    cwes: [CWE-1035, CWE-1104, CWE-1395]
+    source: https://cwe.mitre.org/data/definitions/1395.html

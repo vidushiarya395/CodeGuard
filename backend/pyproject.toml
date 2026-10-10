@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codeguard"
+version = "0.1.0"
+description = "Security checker for AI-generated Python code."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.7",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    "typer>=0.12",
+    "rich>=13.7",
+    "bandit>=1.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx2>=2.13"]
+
+[project.scripts]
+codeguard = "codeguard.cli:app"
+
+[tool.setuptools.packages.find]
+include = ["codeguard*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: runs the real Semgrep or Bandit tools (Semgrep also needs internet to fetch p/python)",
+]

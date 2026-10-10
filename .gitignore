@@ -1,0 +1,30 @@
+# Local-only files (never commit)
+CLAUDE.md
+CLAUDE.local.md
+CODEGUARD_RULES.md
+CODEGUARD_PROMPTS.md
+.claude/
+.env
+.venv/
+node_modules/
+.cache/
+benchmark/external/
+benchmark/runs/
+
+# Separate environment for Semgrep (its dependencies clash with FastAPI's)
+.venv-semgrep/
+
+# Python build and test leftovers
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Frontend build output
+frontend/dist/
+
+# Local database
+*.sqlite3
+*.db
