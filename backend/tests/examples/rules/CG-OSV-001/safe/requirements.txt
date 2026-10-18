@@ -1,0 +1,4 @@
+# Example only: scanned by the tests, never run.  CG-OSV-001 (safe)
+# A current release, and a range (not a pin), which is not looked up.
+flask==3.0.3
+requests>=2.32

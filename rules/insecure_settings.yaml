@@ -1,0 +1,185 @@
+# Insecure settings (Agent 2, no AI).
+#
+# Same pattern format as deprecated_apis.yaml. Extra keys for "assign" patterns:
+#   assign:     what is assigned to: a variable (DEBUG), an attribute (flask.Flask().debug,
+#               *.check_hostname) or a constant config key (flask.Flask().config[DEBUG])
+#   value_is:   the assigned value is this constant
+#   value_in:   the assigned value resolves to one of these dotted names
+#   files:      only check files whose path matches one of these patterns ("*" = anything)
+#
+# Only explicit, constant settings are flagged (debug=True, verify=False). A value read from
+# a variable or the environment is not flagged, because its value is unknown.
+#
+# Sources for every rule: docs/RULE_SOURCES.md
+
+version: 1
+
+rules:
+  - id: CG-SET-001
+    title: TLS certificate verification turned off in an HTTP client
+    cwe: CWE-295
+    message: >-
+      Certificate verification is switched off for this HTTP request or client. Anyone between
+      the program and the server can then pretend to be the server and read or change the data.
+    fix_hint: >-
+      Remove verify=False (or ssl=False). If the server uses a private certificate authority,
+      pass its certificate file instead: verify="/path/to/ca.pem".
+    sources:
+      - https://requests.readthedocs.io/en/latest/user/advanced/#ssl-cert-verification
+      - https://www.python-httpx.org/advanced/ssl/
+      - https://docs.aiohttp.org/en/stable/client_advanced.html#ssl-control-for-tcp-sockets
+      - https://urllib3.readthedocs.io/en/stable/advanced-usage.html#certificate-verification
+      - https://cwe.mitre.org/data/definitions/295.html
+    patterns:
+      - call: ["requests.*", "httpx.*"]
+        where:
+          - arg: verify
+            is: false
+      - assign: ["requests.Session().verify", "requests.session().verify"]
+        value_is: false
+      - call: "aiohttp.*"
+        where:
+          - arg: ssl
+            is: false
+      - call: "aiohttp.*"
+        where:
+          - arg: verify_ssl
+            is: false
+      - call: ["urllib3.PoolManager", "urllib3.ProxyManager", "urllib3.HTTPSConnectionPool"]
+        where:
+          - arg: cert_reqs
+            is: CERT_NONE
+      - call: ["urllib3.PoolManager", "urllib3.ProxyManager", "urllib3.HTTPSConnectionPool"]
+        where:
+          - arg: cert_reqs
+            in: [ssl.CERT_NONE]
+
+  - id: CG-SET-002
+    title: SSL context without certificate or host name checks
+    cwe: CWE-295
+    message: >-
+      This SSL context does not check the server's certificate or host name, so connections can
+      be intercepted. Python turned these checks on by default in PEP 476 for this reason.
+    fix_hint: >-
+      Use ssl.create_default_context() and keep its defaults (check_hostname=True,
+      verify_mode=ssl.CERT_REQUIRED).
+    sources:
+      - https://peps.python.org/pep-0476/
+      - https://docs.python.org/3/library/ssl.html#ssl.SSLContext.check_hostname
+      - https://docs.python.org/3/library/ssl.html#ssl.CERT_NONE
+      - https://cwe.mitre.org/data/definitions/295.html
+    patterns:
+      - call: ssl._create_unverified_context
+      - assign: ssl._create_default_https_context
+        value_in: [ssl._create_unverified_context]
+      - assign: "*.check_hostname"
+        value_is: false
+      - assign: "*.verify_mode"
+        value_in: [ssl.CERT_NONE]
+
+  - id: CG-SET-003
+    title: Flask debug mode turned on
+    cwe: CWE-489
+    message: >-
+      Flask's debug mode shows an interactive debugger on errors, which lets anyone who can
+      reach the page run Python code on the server. Flask's documentation says never to use it
+      in production.
+    fix_hint: >-
+      Remove debug=True. Turn debugging on only on your own machine, e.g. with
+      "flask run --debug" or an environment variable that is off by default.
+    sources:
+      - https://flask.palletsprojects.com/en/stable/debugging/
+      - https://flask.palletsprojects.com/en/stable/quickstart/#debug-mode
+      - https://cwe.mitre.org/data/definitions/489.html
+    patterns:
+      - call: flask.Flask().run
+        where:
+          - arg: debug
+            is: true
+      - assign: [flask.Flask().debug, "flask.Flask().config[DEBUG]"]
+        value_is: true
+      - call: flask.Flask().config.update
+        where:
+          - arg: DEBUG
+            is: true
+
+  - id: CG-SET-004
+    title: Django DEBUG turned on in settings
+    cwe: CWE-489
+    message: >-
+      With DEBUG = True, Django shows detailed error pages with settings, source code and
+      request data to any visitor. Django's documentation says never to deploy with DEBUG on.
+    fix_hint: Set DEBUG from an environment variable that defaults to False, e.g. DEBUG = os.environ.get("DJANGO_DEBUG") == "1".
+    sources:
+      - https://docs.djangoproject.com/en/stable/ref/settings/#debug
+      - https://docs.djangoproject.com/en/stable/howto/deployment/checklist/#debug
+      - https://cwe.mitre.org/data/definitions/489.html
+    patterns:
+      - assign: DEBUG
+        value_is: true
+        files: ["settings.py", "*/settings.py", "settings/*.py", "*/settings/*.py"]
+
+  - id: CG-SET-005
+    title: JWT signature verification turned off
+    cwe: CWE-347
+    message: >-
+      The token is decoded without checking its signature, so anyone can create a token with
+      any user name or role and it will be accepted.
+    fix_hint: >-
+      Verify the signature: jwt.decode(token, key, algorithms=["HS256"]) with the real key and
+      a fixed list of allowed algorithms.
+    sources:
+      - https://pyjwt.readthedocs.io/en/stable/usage.html#reading-the-claimset-without-validation
+      - https://www.rfc-editor.org/rfc/rfc8725#section-3.1
+      - https://cwe.mitre.org/data/definitions/347.html
+    patterns:
+      - call: [jwt.decode, jwt.api_jwt.decode, jose.jwt.decode]
+        where:
+          - arg: options
+            dict_has: {verify_signature: false}
+      - call: [jwt.decode, jwt.api_jwt.decode]
+        where:
+          - arg: verify
+            is: false
+
+  - id: CG-SET-006
+    title: SSH client accepts unknown host keys
+    cwe: CWE-295
+    message: >-
+      AutoAddPolicy (and WarningPolicy) accept any server's host key without checking it, so
+      the program cannot tell the real server from an attacker in the middle.
+    fix_hint: >-
+      Load known host keys with client.load_system_host_keys() (or load_host_keys(path)) and
+      keep the default RejectPolicy.
+    sources:
+      - https://docs.paramiko.org/en/stable/api/client.html#paramiko.client.AutoAddPolicy
+      - https://cwe.mitre.org/data/definitions/295.html
+    patterns:
+      - call: "*.set_missing_host_key_policy"
+        where:
+          - position: 0
+            in:
+              - paramiko.AutoAddPolicy
+              - paramiko.AutoAddPolicy()
+              - paramiko.WarningPolicy
+              - paramiko.WarningPolicy()
+              - paramiko.client.AutoAddPolicy
+              - paramiko.client.AutoAddPolicy()
+              - paramiko.client.WarningPolicy
+              - paramiko.client.WarningPolicy()
+
+  - id: CG-SET-007
+    title: Jinja2 autoescaping turned off
+    cwe: CWE-79
+    message: >-
+      With autoescape=False, Jinja2 inserts values into HTML as-is, so user-supplied text
+      containing <script> runs in the visitor's browser (cross-site scripting).
+    fix_hint: Use autoescape=True, or jinja2.select_autoescape() to escape HTML and XML templates.
+    sources:
+      - https://jinja.palletsprojects.com/en/stable/api/#autoescaping
+      - https://cwe.mitre.org/data/definitions/79.html
+    patterns:
+      - call: [jinja2.Environment, jinja2.Template]
+        where:
+          - arg: autoescape
+            is: false

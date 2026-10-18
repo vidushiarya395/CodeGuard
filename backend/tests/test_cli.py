@@ -31,7 +31,7 @@ def fake_result(target="x.py"):
 
 
 def test_scan_prints_table(monkeypatch, tmp_path):
-    monkeypatch.setattr("codeguard.cli.scan_path", lambda p: fake_result())
+    monkeypatch.setattr("codeguard.cli.scan_path", lambda p, settings: fake_result())
     res = runner.invoke(app, ["scan", str(tmp_path)], env={"COLUMNS": "200"})
     assert res.exit_code == 0, res.output
     assert "B602" in res.output
@@ -41,7 +41,7 @@ def test_scan_prints_table(monkeypatch, tmp_path):
 
 
 def test_scan_json(monkeypatch, tmp_path):
-    monkeypatch.setattr("codeguard.cli.scan_path", lambda p: fake_result())
+    monkeypatch.setattr("codeguard.cli.scan_path", lambda p, settings: fake_result())
     res = runner.invoke(app, ["scan", str(tmp_path), "--json"])
     assert res.exit_code == 0
     data = json.loads(res.output)
@@ -61,7 +61,7 @@ def test_no_scanner_ran(monkeypatch, tmp_path):
             ToolRun(tool="bandit", state=ToolState.FAILED, message="broken"),
         ],
     )
-    monkeypatch.setattr("codeguard.cli.scan_path", lambda p: result)
+    monkeypatch.setattr("codeguard.cli.scan_path", lambda p, settings: result)
     res = runner.invoke(app, ["scan", str(tmp_path)], env={"COLUMNS": "200"})
     assert res.exit_code == 0
     assert "nothing was checked" in res.output

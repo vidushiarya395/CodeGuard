@@ -172,3 +172,13 @@ groups:
     name: Known-vulnerable dependency
     cwes: [CWE-1035, CWE-1104, CWE-1395]
     source: https://cwe.mitre.org/data/definitions/1395.html
+
+  - id: untrusted-package
+    name: Dependency that does not exist or comes from an untrusted source
+    cwes: [CWE-829]
+    source: https://cwe.mitre.org/data/definitions/829.html
+
+  - id: signature-verification
+    name: Missing or disabled signature verification
+    cwes: [CWE-347]
+    source: https://cwe.mitre.org/data/definitions/347.html

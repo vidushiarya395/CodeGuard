@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import typer
@@ -9,8 +10,9 @@ from rich.console import Console
 from rich.table import Table
 
 from codeguard import __version__
-from codeguard.agents.standard_scanner import ScanInputError, scan_path
+from codeguard.config import get_settings
 from codeguard.models import ScanResult, ToolState
+from codeguard.scan import ScanInputError, scan_path
 
 app = typer.Typer(add_completion=False, help="CodeGuard: security checker for AI-generated Python code.")
 
@@ -19,6 +21,7 @@ _STATE_STYLE = {
     ToolState.MISSING: "yellow",
     ToolState.FAILED: "red",
     ToolState.TIMEOUT: "red",
+    ToolState.SKIPPED: "yellow",
 }
 
 
@@ -37,10 +40,16 @@ def version() -> None:
 def scan(
     path: Path = typer.Argument(..., help="A Python file or a folder to scan."),
     json_output: bool = typer.Option(False, "--json", help="Print the full result as JSON instead of a table."),
+    offline: bool = typer.Option(
+        False, "--offline", help="Do not contact PyPI or OSV; package checks use cached answers only."
+    ),
 ) -> None:
-    """Scan a file or folder with Semgrep and Bandit and print the findings."""
+    """Scan a file or folder with Semgrep, Bandit and CodeGuard's rule checks, and print the findings."""
+    settings = get_settings()
+    if offline:
+        settings = replace(settings, offline=True)
     try:
-        result = scan_path(path)
+        result = scan_path(path, settings=settings)
     except ScanInputError as exc:
         Console(stderr=True).print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(code=2)
@@ -67,9 +76,9 @@ def print_result(result: ScanResult, console: Console) -> None:
 
     if not result.findings:
         if any(r.state == ToolState.OK for r in result.tool_runs):
-            console.print("\nNo findings from the scanners that ran.")
+            console.print("\nNo findings from the scanners and checks that ran.")
         else:
-            console.print("\n[red]No scanner ran successfully, so nothing was checked.[/red]")
+            console.print("\n[red]No scanner or check ran successfully, so nothing was checked.[/red]")
         return
 
     table = Table(header_style="bold")
@@ -91,8 +100,8 @@ def print_result(result: ScanResult, console: Console) -> None:
     console.print()
     console.print(table)
     console.print(
-        f"{_plural(len(result.findings), 'raw finding')}. These are unverified scanner results; "
-        "confidence and severity are added by the Verifier in a later phase.",
+        f"{_plural(len(result.findings), 'raw finding')}. These are unverified results from the scanners "
+        "and rule checks; confidence and severity are added by the Verifier in a later phase.",
         style="dim",
     )
 

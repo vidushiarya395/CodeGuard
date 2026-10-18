@@ -7,6 +7,7 @@ It does not merge, de-duplicate or rank findings; that is the Verifier's job (Ag
 from __future__ import annotations
 
 import re
+import secrets
 import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -60,11 +61,8 @@ def safe_filename(name: str | None) -> str:
     return base[:100]
 
 
-def scan_code(
-    code: str, filename: str | None = None, settings: Settings | None = None, groups: CweGroups | None = None
-) -> ScanResult:
-    """Scan pasted code. It is written to a temporary folder (never executed) and scanned there."""
-    settings = settings or get_settings()
+def check_snippet(code: str, settings: Settings) -> None:
+    """Reject empty or too-long pasted code."""
     if not code.strip():
         raise ScanInputError("The code is empty.")
     line_count = len(code.splitlines())
@@ -73,10 +71,39 @@ def scan_code(
             f"The code has {line_count} lines; the limit is {settings.max_paste_lines}."
         )
 
+
+def scan_code(
+    code: str, filename: str | None = None, settings: Settings | None = None, groups: CweGroups | None = None
+) -> ScanResult:
+    """Scan pasted code. It is written to a temporary folder (never executed) and scanned there."""
+    settings = settings or get_settings()
+    check_snippet(code, settings)
+
     name = safe_filename(filename)
     with tempfile.TemporaryDirectory(prefix="codeguard-scan-", ignore_cleanup_errors=True) as tmp:
-        file_path = Path(tmp) / name
+        file_path = Path(tmp) / internal_filename()
         file_path.write_text(code, encoding="utf-8", newline="")
         result = scan_path(file_path, settings, groups)
+    rename_file(result, file_path.name, name)
     result.target = name
     return result
+
+
+def internal_filename() -> str:
+    """The on-disk name for code the user hands us as a single file (paste now; uploads later).
+
+    Never the user's own name: a file called string.py or os.py could shadow a module that a
+    scanner imports and so get executed. The user's name is only used in the report.
+    """
+    return f"cg_{secrets.token_hex(8)}.py"
+
+
+def rename_file(result: ScanResult, internal: str, shown: str) -> None:
+    """Show the user's file name instead of the internal one in findings, file errors and messages."""
+    for f in result.findings:
+        if f.file == internal:
+            f.file = shown
+    for run in result.tool_runs:
+        run.file_errors = [shown + e[len(internal) :] if e.startswith(internal + ":") else e for e in run.file_errors]
+        if run.message:
+            run.message = run.message.replace(internal, shown)

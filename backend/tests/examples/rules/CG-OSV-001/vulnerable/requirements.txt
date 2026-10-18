@@ -1,0 +1,3 @@
+# Example only: scanned by the tests, never run.  CG-OSV-001 (vulnerable)
+# flask 0.12 is an old release with published security advisories.
+flask==0.12

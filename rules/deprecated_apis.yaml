@@ -1,0 +1,180 @@
+# Deprecated or unsafe functions (Agent 2, no AI).
+#
+# Each rule has one or more patterns; a rule fires when any pattern matches.
+# Pattern kinds:
+#   call:      a function call, by its full dotted name after resolving imports and simple
+#              variables (app = Flask(...) makes app.run "flask.Flask().run")
+#   attribute: reading a module attribute (e.g. ssl.PROTOCOL_TLSv1)
+#   import:    importing a module
+#   assign:    assigning to a name, attribute or config key (see insecure_settings.yaml)
+# Names may use "*" as a wildcard ("*.extractall" = any object's extractall).
+#
+# "where" lists conditions on the call's arguments; all of them must hold:
+#   arg / position      which argument (keyword name and/or position)
+#   is                  the argument is this constant (true, false, a number or a string)
+#   in                  the argument resolves to one of these dotted names
+#   missing             the argument is not given
+#   missing_or_not_in   the argument is not given, or is not one of these dotted names
+#   not_constant        the argument is not a plain constant (e.g. a variable or f-string)
+#   dict_has            the argument is a dict literal containing these constant entries
+#
+# Sources for every rule: docs/RULE_SOURCES.md
+
+version: 1
+
+rules:
+  - id: CG-DEP-001
+    title: Insecure temporary file name (tempfile.mktemp)
+    cwe: CWE-377
+    message: >-
+      tempfile.mktemp() only returns a name; the file is created later. In between, another
+      process can create a file or link with that name. Python has marked it deprecated as a
+      security hole since version 2.3.
+    fix_hint: Use tempfile.mkstemp() or tempfile.NamedTemporaryFile(), which create the file safely.
+    sources:
+      - https://docs.python.org/3/library/tempfile.html#tempfile.mktemp
+      - https://cwe.mitre.org/data/definitions/377.html
+    patterns:
+      - call: tempfile.mktemp
+
+  - id: CG-DEP-002
+    title: ssl.wrap_socket() does not check certificates
+    cwe: CWE-295
+    message: >-
+      ssl.wrap_socket() was deprecated in Python 3.7 and removed in 3.12. By default it does not
+      verify the server certificate or host name, so a man-in-the-middle can read the traffic.
+    fix_hint: >-
+      Create a context with ssl.create_default_context() and call
+      context.wrap_socket(sock, server_hostname=host).
+    sources:
+      - https://docs.python.org/3.11/library/ssl.html#ssl.wrap_socket
+      - https://docs.python.org/3/whatsnew/3.12.html#ssl
+      - https://cwe.mitre.org/data/definitions/295.html
+    patterns:
+      - call: ssl.wrap_socket
+
+  - id: CG-DEP-003
+    title: Outdated SSL/TLS protocol version
+    cwe: CWE-327
+    message: >-
+      SSLv2, SSLv3, TLS 1.0 and TLS 1.1 are broken or deprecated. Python deprecated these
+      protocol constants and the IETF formally deprecated TLS 1.0 and 1.1 (RFC 8996).
+    fix_hint: >-
+      Use ssl.create_default_context() (or ssl.PROTOCOL_TLS_CLIENT) and, if needed, set
+      context.minimum_version = ssl.TLSVersion.TLSv1_2.
+    sources:
+      - https://docs.python.org/3/library/ssl.html#ssl.PROTOCOL_TLSv1
+      - https://www.rfc-editor.org/rfc/rfc8996
+      - https://cwe.mitre.org/data/definitions/327.html
+    patterns:
+      - attribute:
+          - ssl.PROTOCOL_SSLv2
+          - ssl.PROTOCOL_SSLv3
+          - ssl.PROTOCOL_TLSv1
+          - ssl.PROTOCOL_TLSv1_1
+
+  - id: CG-DEP-004
+    title: YAML loaded with an unsafe loader
+    cwe: CWE-502
+    message: >-
+      yaml.load() without a safe loader (and yaml.unsafe_load()) can build arbitrary Python
+      objects from the YAML text, which lets a crafted file run code. PyYAML deprecated plain
+      yaml.load(input) for this reason in version 5.1.
+    fix_hint: Use yaml.safe_load(data), or yaml.load(data, Loader=yaml.SafeLoader).
+    sources:
+      - https://github.com/yaml/pyyaml/wiki/PyYAML-yaml.load(input)-Deprecation
+      - https://cwe.mitre.org/data/definitions/502.html
+    patterns:
+      - call: [yaml.load, yaml.load_all]
+        where:
+          - arg: Loader
+            position: 1
+            missing_or_not_in: [yaml.SafeLoader, yaml.CSafeLoader, yaml.BaseLoader, yaml.CBaseLoader]
+      - call: [yaml.unsafe_load, yaml.unsafe_load_all]
+
+  - id: CG-DEP-005
+    title: cgi.escape() leaves quotes unescaped
+    cwe: CWE-79
+    message: >-
+      cgi.escape() does not escape quote characters by default, so text placed inside an HTML
+      attribute can break out of it (cross-site scripting). It was deprecated in Python 3.2 and
+      removed in 3.8.
+    fix_hint: Use html.escape(text), which escapes quotes by default.
+    sources:
+      - https://docs.python.org/3.7/library/cgi.html#cgi.escape
+      - https://docs.python.org/3/whatsnew/3.8.html#api-and-feature-removals
+      - https://cwe.mitre.org/data/definitions/79.html
+    patterns:
+      - call: cgi.escape
+
+  - id: CG-DEP-006
+    title: Telnet sends data in cleartext (telnetlib)
+    cwe: CWE-319
+    message: >-
+      Telnet sends everything, including passwords, unencrypted. The telnetlib module was
+      deprecated in Python 3.11 and removed in 3.13 (PEP 594).
+    fix_hint: Use SSH instead (for example the paramiko or asyncssh packages).
+    sources:
+      - https://peps.python.org/pep-0594/#telnetlib
+      - https://cwe.mitre.org/data/definitions/319.html
+    patterns:
+      - import: telnetlib
+
+  - id: CG-DEP-007
+    title: eval() or exec() on a non-constant value
+    cwe: CWE-95
+    message: >-
+      eval() and exec() run their argument as Python code. If any part of it can come from a
+      user, file or network, an attacker can run their own code.
+    fix_hint: >-
+      To read a Python literal, use ast.literal_eval(). To read data, use json.loads(). Never
+      pass outside input to eval() or exec().
+    sources:
+      - https://docs.python.org/3/library/functions.html#eval
+      - https://docs.python.org/3/library/ast.html#ast.literal_eval
+      - https://cwe.mitre.org/data/definitions/95.html
+    patterns:
+      - call: [eval, exec, builtins.eval, builtins.exec]
+        where:
+          - position: 0
+            not_constant: true
+
+  - id: CG-DEP-008
+    title: Tar archive extracted without a safety filter
+    cwe: CWE-22
+    message: >-
+      Extracting a tar archive without filter= trusts the file names inside it. A crafted
+      archive can write outside the target folder (e.g. "../../.bashrc") or create dangerous
+      links. Python added extraction filters for this (PEP 706).
+    fix_hint: Pass filter="data", e.g. tar.extractall(path, filter="data") (Python 3.12+, and recent 3.8-3.11 releases).
+    sources:
+      - https://docs.python.org/3/library/tarfile.html#tarfile-extraction-filter
+      - https://peps.python.org/pep-0706/
+      - https://cwe.mitre.org/data/definitions/22.html
+    patterns:
+      - call:
+          - tarfile.open().extractall
+          - tarfile.open().extract
+          - tarfile.TarFile().extractall
+          - tarfile.TarFile().extract
+          - tarfile.TarFile.open().extractall
+          - tarfile.TarFile.open().extract
+        where:
+          - arg: filter
+            missing: true
+
+  - id: CG-DEP-009
+    title: Block cipher used in ECB mode
+    cwe: CWE-327
+    message: >-
+      ECB mode encrypts identical blocks to identical output, so patterns in the data stay
+      visible and blocks can be swapped. The cryptography and PyCryptodome documentation both
+      warn against it.
+    fix_hint: Use an authenticated mode such as AES-GCM (e.g. cryptography's AESGCM, or AES.MODE_GCM in PyCryptodome).
+    sources:
+      - https://cryptography.io/en/latest/hazmat/primitives/symmetric-encryption/#cryptography.hazmat.primitives.ciphers.modes.ECB
+      - https://pycryptodome.readthedocs.io/en/latest/src/cipher/classic.html#ecb-mode
+      - https://cwe.mitre.org/data/definitions/327.html
+    patterns:
+      - attribute: ["Crypto.Cipher.*.MODE_ECB", "Cryptodome.Cipher.*.MODE_ECB"]
+      - call: cryptography.hazmat.primitives.ciphers.modes.ECB

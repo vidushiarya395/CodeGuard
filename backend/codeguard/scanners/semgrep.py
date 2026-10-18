@@ -20,9 +20,10 @@ from codeguard.scanners.base import (
     humanize,
     last_lines,
     missing_run,
-    normalize_rel_path,
+    neutral_dir,
     run_command,
     timeout_run,
+    to_rel_path,
 )
 
 TOOL = "semgrep"
@@ -58,6 +59,11 @@ def build_command(exe: str, settings: Settings, target: ScanTarget) -> list[str]
         "--disable-version-check",
         # Ignore "# nosemgrep" comments: scanned code must not be able to switch checks off.
         "--disable-nosem",
+        # Semgrep's built-in ignore list skips every tests/ folder, and inside a git repo it only
+        # scans tracked files. Turn both off so nothing is silently skipped; SKIP_DIRS below
+        # still excludes virtualenvs and vendored code.
+        "--x-ignore-semgrepignore-files",
+        "--no-git-ignore",
     ]
     for d in SKIP_DIRS:
         cmd += ["--exclude", d]
@@ -73,16 +79,18 @@ def run_semgrep(target: ScanTarget, settings: Settings, groups: CweGroups) -> Sc
 
     # The version is read from Semgrep's JSON output (a separate --version call costs seconds).
     version = None
-    try:
-        res = run_command(build_command(exe, settings, target), cwd=target.cwd, timeout_s=settings.scanner_timeout_s)
-    except FileNotFoundError:
-        return missing_run(TOOL, f"Semgrep could not be started from {exe}. {INSTALL_HINT}")
-    except OSError as exc:
-        return failed_run(TOOL, f"Semgrep could not be started: {exc}", version)
-    except ToolTimeout:
-        return timeout_run(TOOL, settings.scanner_timeout_s, version)
+    # Run from an empty folder, never from inside the scanned code (see ScanTarget).
+    with neutral_dir(TOOL) as tmp:
+        try:
+            res = run_command(build_command(exe, settings, target), cwd=Path(tmp), timeout_s=settings.scanner_timeout_s)
+        except FileNotFoundError:
+            return missing_run(TOOL, f"Semgrep could not be started from {exe}. {INSTALL_HINT}")
+        except OSError as exc:
+            return failed_run(TOOL, f"Semgrep could not be started: {exc}", version)
+        except ToolTimeout:
+            return timeout_run(TOOL, settings.scanner_timeout_s, version)
 
-    return parse_semgrep_output(res.stdout, res.stderr, res.returncode, target.cwd, groups, version, res.duration_s)
+    return parse_semgrep_output(res.stdout, res.stderr, res.returncode, target.root, groups, version, res.duration_s)
 
 
 def parse_semgrep_output(
@@ -112,7 +120,7 @@ def parse_semgrep_output(
             continue
         where = err.get("path") or ""
         msg = (err.get("message") or err.get("type") or "error").strip().splitlines()[0]
-        file_errors.append(f"{normalize_rel_path(where)}: {msg}" if where else msg)
+        file_errors.append(f"{to_rel_path(where, root)}: {msg}" if where else msg)
 
     reader = SourceReader(root)
     findings: list[Finding] = []
@@ -141,7 +149,7 @@ def parse_semgrep_output(
 
 def _to_finding(r: dict, reader: SourceReader, groups: CweGroups) -> Finding | None:
     try:
-        rel = normalize_rel_path(str(r["path"]))
+        rel = to_rel_path(str(r["path"]), reader.root)
         start = int(r["start"]["line"])
         end = int(r.get("end", {}).get("line", start))
         rule_id = str(r["check_id"])

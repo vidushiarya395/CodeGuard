@@ -1,0 +1,43 @@
+# Package checks (Agent 2, no AI).
+#
+# CG-PKG-001 looks up every imported package, every line of requirements*.txt and every
+# "pip install ..." line on PyPI. PyPI answering 404 means the package does not exist.
+# Standard-library modules, relative imports and the project's own modules are skipped.
+# Import names that differ from their PyPI name are translated with import_map.yaml.
+#
+# CG-OSV-001 asks the OSV database about every pinned version (name==1.2.3) found in
+# requirements*.txt or "pip install" lines.
+#
+# Answers are cached in .cache/. When PyPI or OSV cannot be reached, the check is reported
+# as "skipped" instead of failing. Sources for every rule: docs/RULE_SOURCES.md
+
+version: 1
+
+rules:
+  - id: CG-PKG-001
+    title: Package does not exist on PyPI
+    cwe: CWE-829
+    message: >-
+      This package name does not exist on PyPI. AI tools often invent package names. Anyone can
+      register a missing name, so "pip install" could later download an attacker's code
+      ("slopsquatting").
+    fix_hint: >-
+      Find the real package that provides this feature and use its exact name, or remove the
+      import. Do not run "pip install" on a name you have not checked.
+    sources:
+      - https://cwe.mitre.org/data/definitions/829.html
+      - https://arxiv.org/abs/2406.10279
+      - https://docs.pypi.org/api/json/
+
+  - id: CG-OSV-001
+    title: Pinned package version has known vulnerabilities
+    cwe: CWE-1395
+    message: >-
+      This exact package version has publicly known vulnerabilities listed in the OSV database.
+    fix_hint: >-
+      Upgrade to a version that fixes the listed vulnerabilities (see the advisories), then
+      re-run the scan.
+    sources:
+      - https://cwe.mitre.org/data/definitions/1395.html
+      - https://google.github.io/osv.dev/post-v1-query/
+      - https://owasp.org/Top10/A06_2021-Vulnerable_and_Outdated_Components/

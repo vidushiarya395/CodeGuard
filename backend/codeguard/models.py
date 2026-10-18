@@ -93,10 +93,12 @@ class ToolState(str, Enum):
     MISSING = "missing"
     FAILED = "failed"
     TIMEOUT = "timeout"
+    # The check could not run for an expected reason (e.g. no internet for PyPI / OSV).
+    SKIPPED = "skipped"
 
 
 class ToolRun(BaseModel):
-    """What happened when one scanner ran. Lets the UI and CLI say clearly what went wrong."""
+    """What happened when one scanner or rule check ran. Lets the UI and CLI say clearly what went wrong."""
 
     tool: str
     state: ToolState

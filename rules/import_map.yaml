@@ -1,0 +1,151 @@
+# Import name -> PyPI project name.
+#
+# Many packages are imported under a different name than the one used with "pip install"
+# (import cv2 -> pip install opencv-python). Without this table, CG-PKG-001 would wrongly
+# report those imports as missing from PyPI.
+#
+# Keys are import names. A dotted key ("google.protobuf") matches that module and everything
+# under it; the longest matching key wins. A value of null means "not distributed on PyPI"
+# (it ships with another program, e.g. Blender's bpy); such imports are not looked up.
+# Names that only differ by case, "-" or "_" need no entry: PyPI treats them as the same
+# (PEP 503 name normalization).
+#
+# Source for every entry: the project's page on https://pypi.org/project/<name>/
+
+version: 1
+
+map:
+  # Imaging, science and machine learning
+  cv2: opencv-python
+  PIL: Pillow
+  sklearn: scikit-learn
+  skimage: scikit-image
+  mpl_toolkits: matplotlib
+  umap: umap-learn
+  faiss: faiss-cpu
+  llama_cpp: llama-cpp-python
+  absl: absl-py
+  Bio: biopython
+  fitz: PyMuPDF
+  cairo: pycairo
+  OpenGL: PyOpenGL
+  gi: PyGObject
+  wx: wxPython
+  ffmpeg: ffmpeg-python
+  speech_recognition: SpeechRecognition
+
+  # Config, parsing and data formats
+  yaml: PyYAML
+  ruamel: ruamel.yaml
+  dotenv: python-dotenv
+  dateutil: python-dateutil
+  bs4: beautifulsoup4
+  docx: python-docx
+  pptx: python-pptx
+  magic: python-magic
+  multipart: python-multipart
+  markdown_it: markdown-it-py
+  linkify_it: linkify-it-py
+  slugify: python-slugify
+  attr: attrs
+  dns: dnspython
+  serial: pyserial
+  usb: pyusb
+  Xlib: python-xlib
+  whois: python-whois
+  nmap: python-nmap
+
+  # Security and crypto
+  jwt: PyJWT
+  jose: python-jose
+  Crypto: pycryptodome
+  Cryptodome: pycryptodomex
+  OpenSSL: pyOpenSSL
+  nacl: PyNaCl
+  argon2: argon2-cffi
+  ldap: python-ldap
+
+  # Web and networking
+  socketio: python-socketio
+  engineio: python-engineio
+  websocket: websocket-client
+  zmq: pyzmq
+  grpc: grpcio
+  kafka: kafka-python
+  telegram: python-telegram-bot
+  discord: discord.py
+  memcache: python-memcached
+  consul: python-consul
+  snappy: python-snappy
+  MySQLdb: mysqlclient
+
+  # Django add-ons
+  rest_framework: djangorestframework
+  corsheaders: django-cors-headers
+  debug_toolbar: django-debug-toolbar
+  crispy_forms: django-crispy-forms
+  environ: django-environ
+  storages: django-storages
+
+  # Google (the "google" namespace is shared by many packages)
+  google.protobuf: protobuf
+  google.cloud.storage: google-cloud-storage
+  google.cloud.bigquery: google-cloud-bigquery
+  google.cloud.firestore: google-cloud-firestore
+  google.generativeai: google-generativeai
+  google.genai: google-genai
+  google.auth: google-auth
+  google.oauth2: google-auth
+  google.api_core: google-api-core
+  googleapiclient: google-api-python-client
+  apiclient: google-api-python-client
+
+  # Monitoring
+  opentelemetry: opentelemetry-api
+
+  # Developer tools
+  ctags: python-ctags3
+  git: GitPython
+  github: PyGithub
+  pkg_resources: setuptools
+  _pytest: pytest
+
+  # Windows
+  win32api: pywin32
+  win32con: pywin32
+  win32com: pywin32
+  win32gui: pywin32
+  win32file: pywin32
+  pythoncom: pywin32
+  pywintypes: pywin32
+
+  # Hardware
+  RPi: RPi.GPIO
+  bluetooth: PyBluez
+
+  # Not distributed on PyPI; never looked up
+  annotationlib: null  # standard library from Python 3.14 (newer than some runtimes know)
+  compression: null    # standard library from Python 3.14
+  _typeshed: null      # exists only inside type checkers, imported under TYPE_CHECKING
+  # Python 2 standard library, imported by old code as a fallback (try: import urllib2 ...)
+  _winreg: null
+  __builtin__: null
+  urllib2: null
+  urlparse: null
+  httplib: null
+  cookielib: null
+  ConfigParser: null
+  cPickle: null
+  cStringIO: null
+  StringIO: null
+  Queue: null
+  HTMLParser: null
+  SocketServer: null
+  xmlrpclib: null
+  Tkinter: null
+  commands: null
+  thread: null
+  bpy: null        # Blender
+  arcpy: null      # ArcGIS
+  rospy: null      # ROS
+  apt: null        # Debian/Ubuntu system package

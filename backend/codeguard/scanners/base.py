@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -35,17 +36,23 @@ MAX_EVIDENCE_LINES = 20
 
 @dataclass
 class ScanTarget:
-    """What to scan: the tool runs inside `cwd` and is given `arg` (a file name or ".")."""
+    """What to scan: the tool is given `arg` (the absolute file or folder path) and reports paths
+    that are turned back into paths relative to `root`.
 
-    cwd: Path
+    Tools never run *inside* the scanned folder: a scanned file named string.py or os.py in the
+    working directory (or on sys.path) would be imported, i.e. executed, by the tool's own Python.
+    Each runner starts its tool from a new, empty folder instead (see neutral_dir).
+    """
+
+    root: Path
     arg: str
 
     @classmethod
     def from_path(cls, path: Path) -> "ScanTarget":
         path = path.resolve()
         if path.is_file():
-            return cls(cwd=path.parent, arg=path.name)
-        return cls(cwd=path, arg=".")
+            return cls(root=path.parent, arg=str(path))
+        return cls(root=path, arg=str(path))
 
 
 @dataclass
@@ -89,6 +96,26 @@ def run_command(cmd: list[str], cwd: Path, timeout_s: int) -> CommandResult:
     except subprocess.TimeoutExpired as exc:
         raise ToolTimeout(f"timed out after {timeout_s} s") from exc
     return CommandResult(proc.returncode, proc.stdout or "", proc.stderr or "", time.perf_counter() - start)
+
+
+def neutral_dir(tool: str) -> tempfile.TemporaryDirectory:
+    """A new, empty folder to run a tool from, so no scanned file can shadow a module it imports."""
+    return tempfile.TemporaryDirectory(prefix=f"codeguard-{tool}-", ignore_cleanup_errors=True)
+
+
+def to_rel_path(path: str, root: Path) -> str:
+    """A tool's path (absolute, or relative to the scan root) as a clean path relative to `root`."""
+    p = Path(path)
+    if p.is_absolute():
+        try:
+            path = p.relative_to(root).as_posix()
+        except ValueError:
+            # Same file, different spelling (Windows letter case, short 8.3 names): compare resolved.
+            try:
+                path = p.resolve().relative_to(root.resolve()).as_posix()
+            except (OSError, ValueError):
+                pass
+    return normalize_rel_path(path)
 
 
 def normalize_rel_path(path: str) -> str:

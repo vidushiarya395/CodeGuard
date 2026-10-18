@@ -7,7 +7,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from codeguard import __version__
-from codeguard.agents.standard_scanner import ScanInputError, scan_code
+from codeguard.scan import ScanInputError, scan_code
 from codeguard.models import ScanResult
 
 app = FastAPI(title="CodeGuard API", version=__version__)
