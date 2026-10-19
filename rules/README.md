@@ -12,6 +12,7 @@ error naming the file. The source for every rule is in `docs/RULE_SOURCES.md`.
 | `deprecated_apis.yaml` | CG-DEP-001 to CG-DEP-009: deprecated or unsafe functions (`tempfile.mktemp`, `yaml.load`, `eval`, ...). |
 | `insecure_settings.yaml` | CG-SET-001 to CG-SET-007: insecure settings (`verify=False`, `debug=True`, ...). |
 | `secrets.yaml` | CG-SEC-001 to CG-SEC-003: hard-coded and placeholder secrets, token formats, and the lists that keep false alarms down. |
+| `checklist.yaml` | CG-CHK-001 to CG-CHK-022: the AI checklist review (each item a yes/no question mapped to a CWE), and the patterns that spot text written to an AI reviewer. |
 
 ## Adding a rule
 

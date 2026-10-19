@@ -1,4 +1,4 @@
-"""One scan = Agent 1 (Semgrep + Bandit) and Agent 2's rule checks, run side by side.
+"""One scan = Agent 1 (Semgrep + Bandit) and Agent 2 (rule checks + AI review), run side by side.
 
 This is what the CLI and the API call. Secret values are masked in every finding here
 (codeguard.redact), whichever detector reported it. The findings are still raw (unverified); the Verifier
@@ -14,6 +14,7 @@ from pathlib import Path
 
 from codeguard.agents import standard_scanner
 from codeguard.agents.ai_mistake_finder import run_rule_checks
+from codeguard.agents.llm_review import run_llm_review
 from codeguard.agents.standard_scanner import (
     ScanInputError,
     check_snippet,
@@ -23,6 +24,7 @@ from codeguard.agents.standard_scanner import (
 )
 from codeguard.config import Settings, get_settings
 from codeguard.cwe import CweGroups, get_cwe_groups
+from codeguard.llm.client import LLMClient
 from codeguard.models import ScanResult
 from codeguard.redact import mask_secrets
 from codeguard.rulechecks.netclient import PackageIndex
@@ -36,6 +38,7 @@ def scan_path(
     groups: CweGroups | None = None,
     index: PackageIndex | None = None,
     display_name: str | None = None,
+    llm: LLMClient | None = None,
 ) -> ScanResult:
     """Scan a file or folder. For a single file, `display_name` is the name shown in the report and
     seen by the rule checks, when the file on disk has a different (internal) name."""
@@ -48,11 +51,12 @@ def scan_path(
         display_name = None
 
     start = time.perf_counter()
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(max_workers=3) as pool:
         agent1 = pool.submit(standard_scanner.scan_path, path, settings, groups)
         agent2 = pool.submit(run_rule_checks, path, settings, groups, index, None, display_name)
+        agent2_ai = pool.submit(run_llm_review, path, settings, groups, llm, display_name)
         scanners = agent1.result()
-        rule_outcomes = agent2.result()
+        rule_outcomes = agent2.result() + agent2_ai.result()
 
     if display_name:
         rename_file(scanners, path.name, display_name)
@@ -74,6 +78,7 @@ def scan_code(
     settings: Settings | None = None,
     groups: CweGroups | None = None,
     index: PackageIndex | None = None,
+    llm: LLMClient | None = None,
 ) -> ScanResult:
     """Scan pasted code. It is written to a temporary folder (never executed) and scanned there."""
     settings = settings or get_settings()
@@ -82,7 +87,7 @@ def scan_code(
     with tempfile.TemporaryDirectory(prefix="codeguard-scan-", ignore_cleanup_errors=True) as tmp:
         file_path = Path(tmp) / internal_filename()
         file_path.write_text(code, encoding="utf-8", newline="")
-        result = scan_path(file_path, settings, groups, index, display_name=name)
+        result = scan_path(file_path, settings, groups, index, display_name=name, llm=llm)
     result.target = name
     return result
 

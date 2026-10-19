@@ -53,6 +53,26 @@ class Settings:
     # True = never call PyPI or OSV; only cached answers are used.
     offline: bool = field(default_factory=lambda: _bool_env("CODEGUARD_OFFLINE"))
 
+    # --- AI provider (see codeguard/llm). Keys have repr=False so they never show up in a printout. ---
+    llm_provider: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "gemini").strip().lower() or "gemini")
+    gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", "").strip(), repr=False)
+    gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "").strip())
+    groq_api_key: str = field(default_factory=lambda: os.getenv("GROQ_API_KEY", "").strip(), repr=False)
+    groq_model: str = field(default_factory=lambda: os.getenv("GROQ_MODEL", "").strip())
+    ollama_base_url: str = field(
+        default_factory=lambda: os.getenv("OLLAMA_BASE_URL", "").strip() or "http://localhost:11434"
+    )
+    ollama_model: str = field(default_factory=lambda: os.getenv("OLLAMA_MODEL", "").strip())
+    # False = skip the LLM checklist review and the open question (rule checks and scanners still run).
+    llm_review: bool = field(default_factory=lambda: _bool_env("CODEGUARD_LLM_REVIEW", True))
+    # 0 = use the provider's default free-tier limit (see codeguard/llm/providers.py).
+    llm_rpm: int = field(default_factory=lambda: _int_env("CODEGUARD_LLM_RPM", 0))
+    llm_rpd: int = field(default_factory=lambda: _int_env("CODEGUARD_LLM_RPD", 0))
+    llm_timeout_s: int = field(default_factory=lambda: _int_env("CODEGUARD_LLM_TIMEOUT", 90))
+    llm_max_retries: int = field(default_factory=lambda: _int_env("CODEGUARD_LLM_MAX_RETRIES", 4))
+    # The LLM review looks at no more than this many Python files per scan (free-tier limits).
+    llm_max_files: int = field(default_factory=lambda: _int_env("CODEGUARD_LLM_MAX_FILES", 20))
+
 
 def get_settings() -> Settings:
     return Settings()

@@ -10,6 +10,8 @@ Five checks, every rule defined in rules/*.yaml:
 Each check reports its own ToolRun, so the CLI and UI can say exactly what ran, what was
 skipped (e.g. no internet for PyPI / OSV) and why. Like Agent 1, it only collects findings;
 merging and ranking is the Verifier's job (Agent 3).
+
+The AI part of Agent 2 (LLM checklist review and the open question) is in llm_review.py.
 """
 
 from __future__ import annotations

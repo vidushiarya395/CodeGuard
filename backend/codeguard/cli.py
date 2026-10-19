@@ -43,11 +43,16 @@ def scan(
     offline: bool = typer.Option(
         False, "--offline", help="Do not contact PyPI or OSV; package checks use cached answers only."
     ),
+    no_llm: bool = typer.Option(
+        False, "--no-llm", help="Skip the AI checklist review and open question (no code is sent to an AI service)."
+    ),
 ) -> None:
-    """Scan a file or folder with Semgrep, Bandit and CodeGuard's rule checks, and print the findings."""
+    """Scan a file or folder with Semgrep, Bandit, CodeGuard's rule checks and the AI review, and print the findings."""
     settings = get_settings()
     if offline:
         settings = replace(settings, offline=True)
+    if no_llm:
+        settings = replace(settings, llm_review=False)
     try:
         result = scan_path(path, settings=settings)
     except ScanInputError as exc:
@@ -73,6 +78,18 @@ def print_result(result: ScanResult, console: Console) -> None:
             console.print(f"    {run.message}", style=style, markup=False)
         for err in run.file_errors[:5]:
             console.print(f"    file error: {err}", style="yellow", markup=False)
+        if run.llm:
+            u = run.llm
+            console.print(
+                f"    {u.provider}/{u.model}, prompt {u.prompt_version}: "
+                f"{_plural(u.calls, 'request')} sent, {_plural(u.cache_hits, 'cached answer')} reused",
+                style="dim",
+                markup=False,
+            )
+        for note in run.notes[:10]:
+            console.print(f"    note: {note}", style="yellow", markup=False)
+        if len(run.notes) > 10:
+            console.print(f"    ... and {len(run.notes) - 10} more notes (see --json)", style="yellow")
 
     if not result.findings:
         if any(r.state == ToolState.OK for r in result.tool_runs):
@@ -101,9 +118,40 @@ def print_result(result: ScanResult, console: Console) -> None:
     console.print(table)
     console.print(
         f"{_plural(len(result.findings), 'raw finding')}. These are unverified results from the scanners "
-        "and rule checks; confidence and severity are added by the Verifier in a later phase.",
+        "rule checks and AI review; confidence and severity are added by the Verifier in a later phase.",
         style="dim",
     )
+
+
+@app.command("check-llm")
+def check_llm() -> None:
+    """Send one tiny test request to the AI provider set in .env, to check the key works. No code is sent."""
+    from codeguard.llm import LLMError, make_client
+    from codeguard.llm.client import Prompt
+
+    from pydantic import BaseModel
+
+    class _Ok(BaseModel):
+        ok: bool
+
+    console = Console()
+    settings = get_settings()
+    try:
+        client = make_client(settings)
+        console.print(f"Provider: {client.name}   Model: {client.model}", markup=False)
+        prompt = Prompt(
+            id="connection-check",
+            version="connection-check-v1",
+            system="You answer only with JSON.",
+            user='Reply with exactly this JSON object: {"ok": true}',
+        )
+        result = client.complete_json(prompt, _Ok, use_cache=False)
+    except LLMError as exc:
+        Console(stderr=True).print(f"[red]AI provider not working:[/red] {exc}", highlight=False)
+        raise typer.Exit(code=1)
+    source = _plural(result.requests, "request")
+    version = f" (model version {result.model_version})" if result.model_version else ""
+    console.print(f"[green]OK[/green]: the AI provider answered with valid JSON ({source}){version}.", highlight=False)
 
 
 def _plural(n: int, word: str) -> str:

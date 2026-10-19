@@ -97,6 +97,16 @@ class ToolState(str, Enum):
     SKIPPED = "skipped"
 
 
+class LLMUsage(BaseModel):
+    """Which model answered and how, for one AI check in one scan (recorded for the research runs)."""
+
+    provider: str
+    model: str
+    prompt_version: str
+    calls: int = 0  # requests actually sent to the provider (retries included)
+    cache_hits: int = 0
+
+
 class ToolRun(BaseModel):
     """What happened when one scanner or rule check ran. Lets the UI and CLI say clearly what went wrong."""
 
@@ -108,6 +118,9 @@ class ToolRun(BaseModel):
     findings_count: int = 0
     # Problems the tool reported for single files (e.g. a file it could not parse).
     file_errors: list[str] = Field(default_factory=list)
+    # Other things worth knowing, e.g. an AI answer that was rejected and why.
+    notes: list[str] = Field(default_factory=list)
+    llm: LLMUsage | None = None
 
 
 class ScanResult(BaseModel):
