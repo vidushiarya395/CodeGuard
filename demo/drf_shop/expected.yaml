@@ -1,0 +1,38 @@
+app: drf_shop
+description: Shop REST API with Django REST framework view sets, serializers and django-cors-headers.
+
+vulnerabilities:
+  - file: shop/views.py
+    line: 10
+    cwe: CWE-306
+    what: The product view set lets anyone create, change and delete products (AllowAny).
+  - file: shop/views.py
+    line: 16
+    cwe: CWE-306
+    what: The order view set sets no permission and the settings have no default, so DRF allows anyone.
+  - file: shop/views.py
+    line: 17
+    cwe: CWE-639
+    what: Orders are not filtered by customer (queryset = Order.objects.all()), so users see each other's orders.
+  - file: shop/settings.py
+    line: 51
+    cwe: CWE-942
+    what: CORS_ALLOW_ALL_ORIGINS together with CORS_ALLOW_CREDENTIALS.
+  - file: shop/serializers.py
+    line: 29
+    cwe: CWE-915
+    what: UserSerializer exposes every field (fields = "__all__"), so signup can set is_staff / is_superuser.
+
+quiet:
+  - file: shop/views.py
+    line: 24
+    cwe: CWE-306
+    why: The review view set requires IsAuthenticated and filters by author.
+  - file: shop/views.py
+    line: 37
+    cwe: CWE-306
+    why: Signing up is public by design.
+  - file: shop/settings.py
+    line: 9
+    cwe: CWE-489
+    why: DEBUG comes from an environment variable that defaults to off.

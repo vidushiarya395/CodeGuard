@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from codeguard.models import Finding, ToolRun, ToolState
+from codeguard.textio import read_source
 
 # Folders that hold installed or vendored code, not the user's own code.
 SKIP_DIRS: tuple[str, ...] = (
@@ -136,7 +137,7 @@ class SourceReader:
     def lines(self, rel_path: str, start: int, end: int) -> str | None:
         if rel_path not in self._cache:
             try:
-                text = (self.root / rel_path).read_text(encoding="utf-8", errors="replace")
+                text, _ = read_source(self.root / rel_path)
                 self._cache[rel_path] = text.splitlines()
             except OSError:
                 self._cache[rel_path] = None

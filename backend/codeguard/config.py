@@ -94,6 +94,11 @@ class Settings:
     llm_max_retries: int = field(default_factory=lambda: _int_env("CODEGUARD_LLM_MAX_RETRIES", 4))
     # The LLM review looks at no more than this many Python files per scan (free-tier limits).
     llm_max_files: int = field(default_factory=lambda: _int_env("CODEGUARD_LLM_MAX_FILES", 20))
+    # ...and no more than this many parts of files (a small file is one part; a bigger one is split
+    # by function and class). Each part costs two AI requests (checklist + open question).
+    llm_max_units: int = field(default_factory=lambda: _int_env("CODEGUARD_LLM_MAX_UNITS", 15))
+    # Files up to this many lines are reviewed whole; bigger files are split by function and class.
+    llm_unit_lines: int = field(default_factory=lambda: _int_env("CODEGUARD_LLM_UNIT_LINES", 150))
 
 
 def get_settings() -> Settings:

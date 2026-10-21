@@ -1,0 +1,30 @@
+app: price_scraper
+description: requests + BeautifulSoup price scraper (CLI) with a small Flask preview server.
+
+vulnerabilities:
+  - file: scraper.py
+    line: 13
+    cwe: CWE-829
+    what: Imports pricescrape_helpers, a package that does not exist on PyPI (hallucinated; anyone could register it).
+  - file: scraper.py
+    line: 15
+    cwe: CWE-798
+    what: Hard-coded API key.
+  - file: scraper.py
+    line: 21
+    cwe: CWE-295
+    what: TLS certificate checks turned off (verify=False).
+  - file: preview_server.py
+    line: 16
+    cwe: CWE-918
+    what: The server fetches any URL from the query string (SSRF); startswith("http") is not a host check.
+
+quiet:
+  - file: scraper.py
+    line: 21
+    cwe: CWE-918
+    why: The CLI fetches URLs its own user typed; that is the purpose of the tool, not SSRF.
+  - file: preview_server.py
+    line: 6
+    cwe: CWE-829
+    why: scraper is the project's own module, not a PyPI package.

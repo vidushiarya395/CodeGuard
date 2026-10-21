@@ -151,8 +151,16 @@ def _condition_holds(call: ast.Call, cond: Condition, resolver: NameResolver) ->
         return node is _MISSING
     if cond.missing_or_not_in is not None:
         return node is _MISSING or resolver.resolve(node) not in cond.missing_or_not_in
+    if cond.not_true:
+        return node is _MISSING or (isinstance(node, ast.Constant) and (node.value is False or node.value is None))
     if node is _MISSING:
         return False
+    if cond.matches is not None:
+        return (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and re.search(cond.matches, node.value, re.IGNORECASE) is not None
+        )
     if cond.has_is:
         return _is_constant(node, cond.is_)
     if cond.in_ is not None:

@@ -1,0 +1,38 @@
+app: upload_service
+description: Flask file-sharing service (upload, list, download, delete), no accounts.
+
+vulnerabilities:
+  - file: app.py
+    line: 29
+    cwe: CWE-434
+    what: Any file type is accepted and saved (HTML, scripts, executables).
+  - file: app.py
+    line: 29
+    cwe: CWE-22
+    what: The user's own file name is used in the save path ("../" escapes the upload folder).
+  - file: app.py
+    line: 51
+    cwe: CWE-22
+    what: send_file with a path built from the URL; secure_filename / send_from_directory is not used.
+  - file: app.py
+    line: 55
+    cwe: CWE-306
+    what: Anyone can delete any stored file.
+  - file: app.py
+    line: 58
+    cwe: CWE-22
+    what: os.remove on a path built from the URL.
+
+quiet:
+  - file: app.py
+    line: 39
+    cwe: CWE-434
+    why: The avatar upload checks the extension and uses secure_filename.
+  - file: app.py
+    line: 39
+    cwe: CWE-22
+    why: The avatar name goes through secure_filename.
+  - file: app.py
+    line: 23
+    cwe: CWE-306
+    why: Uploading to a public file-sharing service is intended (the bug is in what is accepted).

@@ -1,0 +1,40 @@
+app: inventory_api
+description: >-
+  FastAPI inventory API written carefully (login on every route, owner checks, pydantic limits,
+  fixed CORS origins). Mostly here to show what CodeGuard should NOT report.
+
+vulnerabilities:
+  - file: main.py
+    line: 19
+    cwe: CWE-1188
+    what: SYNC_API_KEY defaults to an empty string, so an empty X-Api-Key header passes the check when the variable is not set.
+  - file: main.py
+    line: 111
+    cwe: CWE-208
+    what: The API key is compared with != instead of hmac.compare_digest (timing side channel).
+
+quiet:
+  - file: main.py
+    line: 46
+    cwe: CWE-942
+    why: CORS lists one exact origin.
+  - file: main.py
+    line: 85
+    cwe: CWE-915
+    why: Only named fields of the ItemIn model are copied.
+  - file: main.py
+    line: 92
+    cwe: CWE-639
+    why: update_item fetches through own_item(), which filters by owner_id.
+  - file: main.py
+    line: 101
+    cwe: CWE-639
+    why: delete_item filters by owner_id.
+  - file: main.py
+    line: 101
+    cwe: CWE-306
+    why: delete_item requires a logged-in user (Depends(get_current_user)).
+  - file: main.py
+    line: 110
+    cwe: CWE-306
+    why: The sync route checks an API key before doing anything.

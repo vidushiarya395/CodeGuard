@@ -1,11 +1,16 @@
 """Agent 2: AI-Mistake Finder, rule-check part (no AI).
 
-Five checks, every rule defined in rules/*.yaml:
+Seven checks, every rule defined in rules/*.yaml:
   rule:packages            imported or listed packages that do not exist on PyPI
   rule:vulnerable-versions pinned versions with known vulnerabilities (OSV)
   rule:deprecated-apis     deprecated or unsafe functions
   rule:secrets             hard-coded and placeholder secrets
   rule:insecure-settings   debug=True, verify=False and similar
+  rule:logic-flaws         missing login / role / ownership checks, unchecked uploads, CSRF off ...
+  taint                    user input followed to a dangerous call (its own detector, "taint")
+
+The logic-flaw rules and the taint check use the Code Reader's facts (codeguard.reader), read
+once per scan.
 
 Each check reports its own ToolRun, so the CLI and UI can say exactly what ran, what was
 skipped (e.g. no internet for PyPI / OSV) and why. Like Agent 1, it only collects findings;
@@ -23,12 +28,15 @@ from codeguard import __version__
 from codeguard.config import Settings, get_settings
 from codeguard.cwe import CweGroups, get_cwe_groups
 from codeguard.models import Finding, ToolRun, ToolState
+from codeguard.reader import ProjectFacts, read_project
 from codeguard.rulechecks.loader import RuleFileError, Rulebook, get_rulebook
+from codeguard.rulechecks.logic import check_logic
 from codeguard.rulechecks.netclient import HttpPackageIndex, PackageIndex
 from codeguard.rulechecks.packages import check_packages
 from codeguard.rulechecks.pyast import check_ast_rules
 from codeguard.rulechecks.secrets import SecretMatcher, check_secrets
 from codeguard.rulechecks.source import SourceSet, dedupe, load_sources
+from codeguard.rulechecks.taint import check_taint
 from codeguard.scanners.base import ScannerOutcome
 
 PACKAGES = "rule:packages"
@@ -36,7 +44,9 @@ VULN_VERSIONS = "rule:vulnerable-versions"
 DEPRECATED = "rule:deprecated-apis"
 SECRETS = "rule:secrets"
 SETTINGS = "rule:insecure-settings"
-ALL_CHECKS = (PACKAGES, VULN_VERSIONS, DEPRECATED, SECRETS, SETTINGS)
+LOGIC = "rule:logic-flaws"
+TAINT = "taint"
+ALL_CHECKS = (PACKAGES, VULN_VERSIONS, DEPRECATED, SECRETS, SETTINGS, LOGIC, TAINT)
 
 MAX_NAMES_IN_MESSAGE = 5
 
@@ -69,8 +79,40 @@ def run_rule_checks(
         ),
         _local_outcome(SECRETS, sources, _secrets_fn(book, groups)),
         _local_outcome(SETTINGS, sources, lambda s: check_ast_rules(s, book.settings.rules, groups)),
+        *_reader_outcomes(sources, book, groups),
     ]
     return outcomes
+
+
+def _reader_outcomes(sources: SourceSet, book: Rulebook, groups: CweGroups) -> list[ScannerOutcome]:
+    """The logic-flaw rules and the taint check, which share the Code Reader's facts."""
+    start = time.perf_counter()
+    try:
+        project = read_project(sources, book.taint)
+    except Exception as exc:  # a bug in the reader must not take down the whole scan
+        msg = f"Code Reader failed: {type(exc).__name__}: {exc}"
+        return [ScannerOutcome(ToolRun(tool=t, state=ToolState.FAILED, message=msg)) for t in (LOGIC, TAINT)]
+    read_time = time.perf_counter() - start
+
+    start = time.perf_counter()
+    findings, problems = check_logic(sources.python, project, book, groups)
+    logic = ToolRun(
+        tool=LOGIC,
+        state=ToolState.OK,
+        version=__version__,
+        duration_s=round(time.perf_counter() - start + read_time, 3),
+        file_errors=[*project.errors, *problems],
+    )
+    logic_findings = dedupe(findings)
+    logic.findings_count = len(logic_findings)
+
+    taint = _local_outcome(TAINT, sources, lambda s: _taint_file(s, project, book, groups))
+    return [ScannerOutcome(logic, logic_findings), taint]
+
+
+def _taint_file(src, project: ProjectFacts, book: Rulebook, groups: CweGroups) -> list[Finding]:
+    facts = project.get(src.rel)
+    return check_taint(src, facts, book, groups) if facts is not None else []
 
 
 def _secrets_fn(book: Rulebook, groups: CweGroups):
@@ -81,11 +123,18 @@ def _secrets_fn(book: Rulebook, groups: CweGroups):
 def _local_outcome(
     tool: str, sources: SourceSet, fn, load_time: float = 0.0, file_errors: list[str] | None = None
 ) -> ScannerOutcome:
-    """Run a check that needs no network over every Python file."""
+    """Run a check that needs no network over every Python file. A file that makes the check fail
+    (a bug, or code nested too deeply to walk) becomes a file error; the other files still run."""
     start = time.perf_counter()
     findings: list[Finding] = []
+    errors = list(file_errors or [])
     for src in sources.python:
-        findings += fn(src)
+        try:
+            findings += fn(src)
+        except RecursionError:
+            errors.append(f"{src.rel}: too deeply nested to analyse; skipped by {tool}")
+        except Exception as exc:
+            errors.append(f"{src.rel}: {tool} failed ({type(exc).__name__}: {exc})")
     findings = dedupe(findings)
     run = ToolRun(
         tool=tool,
@@ -93,7 +142,7 @@ def _local_outcome(
         version=__version__,
         duration_s=round(time.perf_counter() - start + load_time, 3),
         findings_count=len(findings),
-        file_errors=list(file_errors or []),
+        file_errors=errors,
     )
     return ScannerOutcome(run, findings)
 

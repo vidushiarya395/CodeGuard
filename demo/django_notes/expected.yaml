@@ -1,0 +1,46 @@
+app: django_notes
+description: Django notes app (function views, urls.py, settings.py), each note belongs to a user.
+
+vulnerabilities:
+  - file: mysite/settings.py
+    line: 7
+    cwe: CWE-798
+    what: Hard-coded Django SECRET_KEY.
+  - file: mysite/settings.py
+    line: 9
+    cwe: CWE-489
+    what: DEBUG = True in settings.
+  - file: mysite/settings.py
+    line: 41
+    cwe: CWE-614
+    what: Session cookie sent over plain HTTP (SESSION_COOKIE_SECURE = False).
+  - file: notes/views.py
+    line: 18
+    cwe: CWE-639
+    what: note_detail loads any note by pk; the owner is never checked.
+  - file: notes/views.py
+    line: 41
+    cwe: CWE-89
+    what: Raw SQL built with an f-string from the q parameter.
+  - file: notes/views.py
+    line: 45
+    cwe: CWE-352
+    what: The note-creating API view is csrf_exempt although it uses the session cookie.
+  - file: notes/views.py
+    line: 50
+    cwe: CWE-915
+    what: The whole POST body goes into Note.objects.create (a user can set owner_id).
+
+quiet:
+  - file: notes/views.py
+    line: 12
+    cwe: CWE-639
+    why: The list is filtered by owner=request.user.
+  - file: notes/views.py
+    line: 33
+    cwe: CWE-639
+    why: The delete view fetches with owner=request.user.
+  - file: notes/views.py
+    line: 25
+    cwe: CWE-915
+    why: Only named fields are passed to create(); the owner is the logged-in user.

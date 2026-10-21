@@ -1,0 +1,336 @@
+# Logic-flaw rules (Agent 2 rule checks, no AI).
+#
+# These look at what a web route does and whether it is protected, using the facts the Code
+# Reader collects with Python's ast module (routes, decorators, parameters, calls). Each rule is
+# either:
+#   patterns:  AST patterns, same format as insecure_settings.yaml, or
+#   check:     a named check in backend/codeguard/rulechecks/logic.py that uses the word lists
+#              in "signals" below.
+#
+# The rules are written to stay quiet when the evidence is unclear: anything that looks like a
+# login or permission check (a decorator, a FastAPI dependency, current_user, a session check,
+# abort(401/403), a class-level permission) counts as protection, even if it might be weak.
+#
+# Sources for every rule: docs/RULE_SOURCES.md
+
+version: 1
+
+signals:
+  # Decorators that require a logged-in user (matched against the decorator's last name part).
+  auth_decorator_regex: "(login|auth|token|jwt|permission|perm|role|admin|staff|superuser|user)s?_(required|accepted|only)|^requires?_|user_passes_test|^authenticated$|^authorize"
+  # Decorators that require a role or permission, not only a login.
+  role_decorator_regex: "(permission|perm|role|admin|staff|superuser)s?_(required|accepted|only)|user_passes_test|^requires?_(role|roles|permission|permissions|admin)"
+  # Names whose use inside a route shows a login / token check.
+  auth_names:
+    - flask_login.current_user
+    - flask_login.utils.current_user
+    - flask.session
+    - flask.g.user
+    - flask.g.current_user
+    - flask_jwt_extended.get_jwt_identity
+    - flask_jwt_extended.verify_jwt_in_request
+    - flask_jwt_extended.current_user
+    - jwt.decode
+    - jose.jwt.decode
+    - django.core.exceptions.PermissionDenied
+    - werkzeug.exceptions.Unauthorized
+    - werkzeug.exceptions.Forbidden
+    - rest_framework.exceptions.PermissionDenied
+    - rest_framework.exceptions.NotAuthenticated
+    - "*.HTTP_401_UNAUTHORIZED"
+    - "*.HTTP_403_FORBIDDEN"
+  # Attribute names and string constants that show a login check (request.user.is_authenticated,
+  # request.headers["Authorization"]).
+  auth_attribute_regex: "^(is_authenticated|is_anonymous|authorization|x-api-key|x-auth-token|api[_-]?key)$"
+  # Attribute, call and string names that show a role check (user.is_admin, has_perm("x"), role == "admin").
+  role_regex: "^(is_admin|is_staff|is_superuser|has_perm|has_perms|has_role|has_permission|is_moderator|role|roles|admin|isadminuser)$"
+  # Routes that are public by design (function name or URL path).
+  public_route_regex: "login|logout|log_in|sign_?in|sign_?up|register|token|refresh|forgot|password_reset|reset_password|verify|confirm|activate|callback|oauth|health|ping|webhook|contact|subscribe|feedback"
+  # Function names or URL paths of destructive or sensitive actions.
+  sensitive_route_regex: "delete|destroy|remove|purge|wipe|drop|truncate|reset|clear_|shutdown|restart|ban|promote|grant|revoke|export|backup|restore|admin|transfer|withdraw|refund|payout"
+  # Function names or URL paths that are for administrators only.
+  admin_route_regex: "admin|superuser|staff|moderat|promote|grant|revoke|set_?role|ban_|manage"
+  # Calls that change stored data or files.
+  write_calls:
+    - "*.session.add"
+    - "*.session.add_all"
+    - "*.session.delete"
+    - "*.session.merge"
+    - "*.session.commit"
+    - "*.objects.create"
+    - "*.objects.update"
+    - "*.objects.update_or_create"
+    - "*.objects.get_or_create"
+    - "*.objects.bulk_create"
+    - "*.filter().update"
+    - "*.filter().delete"
+    - "*.save"
+    - "*.delete"
+    - "*.insert_one"
+    - "*.insert_many"
+    - "*.update_one"
+    - "*.update_many"
+    - "*.delete_one"
+    - "*.delete_many"
+    - "*.replace_one"
+    - "*.commit"
+    - os.remove
+    - os.unlink
+    - os.rename
+    - shutil.rmtree
+    - shutil.move
+  # Calls that delete data or files.
+  destructive_calls:
+    - "*.session.delete"
+    - "*.objects.delete"
+    - "*.filter().delete"
+    - "*.delete"
+    - "*.delete_one"
+    - "*.delete_many"
+    - "*.drop_all"
+    - os.remove
+    - os.unlink
+    - os.rmdir
+    - shutil.rmtree
+  # SQL text (string constants in a query call) that writes or deletes.
+  sql_write_regex: "^\\s*(insert|update|delete|replace|drop|truncate|alter|create)\\b"
+  sql_destructive_regex: "^\\s*(delete|drop|truncate)\\b"
+  # Calls that fetch one stored object.
+  fetch_calls:
+    - "*.query.get"
+    - "*.query.get_or_404"
+    - "*.query.filter_by"
+    - "*.query.filter"
+    - "*.session.get"
+    - "*.session.query"
+    - "*.get_or_404"
+    - "*.query(*).get"
+    - "*.objects.get"
+    - "*.objects.filter"
+    - "*.filter"
+    - "*.filter_by"
+    - "*.where"
+    - django.shortcuts.get_object_or_404
+    - "*.find_one"
+    - "*.execute"
+  # Parameter names that hold an object's id.
+  id_param_regex: "^(id|pk|uuid|.+_(id|pk|uuid))$"
+  # Text (in a comparison, a query call or an if test) that ties an object to the current user.
+  ownership_regex: "current_user|request\\.user|g\\.user|get_jwt_identity|session\\[|session\\.get|owner|author|user_id|created_by|\\.user\\b|token_user|auth_user|can_\\w+|authoriz|permitted"
+  # Text in an if test that checks an uploaded file's type or extension.
+  upload_check_regex: "splitext|endswith|rsplit|\\.suffix|extension|\\bext\\b|content_type|mimetype|allowed|valid|imghdr|filetype|magic"
+  # Calls that check an uploaded file's real type.
+  upload_check_calls: [imghdr.what, filetype.guess, magic.from_buffer, magic.from_file, PIL.Image.open, "PIL.Image.open().verify", os.path.splitext]
+  # FastAPI dependencies that give a database or settings, not a logged-in user.
+  db_dependency_regex: "^(get_)?(db|session|database|conn|connection|engine|settings|config|cache|redis|client|http_client|templates|logger)$|_db$|_session$"
+
+rules:
+  - id: CG-LGC-001
+    title: Route changes data or does something sensitive without a login check
+    cwe: CWE-306
+    check: missing_authentication
+    message: >-
+      This route deletes data, performs an admin action, or changes data while other routes in
+      the app require a login, but it has no login or permission check itself. Anyone who can
+      reach the URL can do this.
+    fix_hint: >-
+      Require a logged-in user: @login_required (Flask-Login, Django), a FastAPI dependency such
+      as Depends(get_current_user), or permission_classes in Django REST framework.
+    sources:
+      - https://cwe.mitre.org/data/definitions/306.html
+      - https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/
+      - https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html
+      - https://flask-login.readthedocs.io/en/latest/#protecting-views
+      - https://docs.djangoproject.com/en/stable/topics/auth/default/#the-login-required-decorator
+      - https://fastapi.tiangolo.com/tutorial/security/
+
+  - id: CG-LGC-002
+    title: Admin action that checks the login but not the user's role
+    cwe: CWE-862
+    check: missing_authorization
+    message: >-
+      This route is for administrators (its name or URL says so) and requires a login, but it
+      never checks the user's role or permissions. Any logged-in user can use it.
+    fix_hint: >-
+      Check the role before acting: a permission decorator (@permission_required,
+      @user_passes_test), DRF's IsAdminUser, or an explicit check such as
+      if not current_user.is_admin: abort(403).
+    sources:
+      - https://cwe.mitre.org/data/definitions/862.html
+      - https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/
+      - https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html
+
+  - id: CG-LGC-003
+    title: Object fetched by a user-supplied id without an ownership check
+    cwe: CWE-639
+    check: idor
+    message: >-
+      The route loads a stored object by an id taken from the URL or request and uses it without
+      checking that it belongs to the logged-in user. Changing the id gives access to other
+      users' data (insecure direct object reference).
+    fix_hint: >-
+      Fetch only the user's own objects (Post.query.filter_by(id=post_id, author_id=current_user.id))
+      or compare the owner before using it: if post.author_id != current_user.id: abort(403).
+    sources:
+      - https://cwe.mitre.org/data/definitions/639.html
+      - https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/
+      - https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html
+
+  - id: CG-LGC-004
+    title: Uploaded file saved without checking its type
+    cwe: CWE-434
+    check: unrestricted_upload
+    message: >-
+      An uploaded file is saved without any check of its extension or type. An attacker can
+      upload HTML, scripts or executables, which may then be served to other users or run.
+    fix_hint: >-
+      Allow only the extensions you need (e.g. an allowed_file() check against
+      ALLOWED_EXTENSIONS), clean the name with secure_filename(), limit the size
+      (MAX_CONTENT_LENGTH) and store uploads outside the code folder.
+    sources:
+      - https://cwe.mitre.org/data/definitions/434.html
+      - https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
+      - https://flask.palletsprojects.com/en/stable/patterns/fileuploads/
+
+  - id: CG-LGC-005
+    title: CSRF protection turned off
+    cwe: CWE-352
+    message: >-
+      CSRF protection is switched off for this view or for the whole app. Another website can
+      then make a logged-in user's browser send requests that change data in their name.
+    fix_hint: >-
+      Remove csrf_exempt / csrf.exempt and keep WTF_CSRF_ENABLED on. For an API used with
+      tokens instead of cookies, use token authentication instead of turning CSRF off.
+    sources:
+      - https://cwe.mitre.org/data/definitions/352.html
+      - https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
+      - https://docs.djangoproject.com/en/stable/ref/csrf/
+      - https://flask-wtf.readthedocs.io/en/stable/csrf/
+      - https://flask-wtf.readthedocs.io/en/stable/config/
+    patterns:
+      - attribute:
+          - django.views.decorators.csrf.csrf_exempt
+          - "flask_wtf.csrf.CSRFProtect().exempt"
+          - "flask_wtf.CSRFProtect().exempt"
+      - assign: "flask.Flask().config[WTF_CSRF_ENABLED]"
+        value_is: false
+      - call: ["flask.Flask().config.update", "flask.Flask().config.from_mapping"]
+        where:
+          - arg: WTF_CSRF_ENABLED
+            is: false
+
+  - id: CG-LGC-006
+    title: Request data passed straight into a model (mass assignment)
+    cwe: CWE-915
+    check: mass_assignment
+    message: >-
+      The whole request body is unpacked into a model or update call (Model(**data)). A user
+      can set any field this way, including ones they should never control, such as is_admin
+      or owner_id.
+    fix_hint: >-
+      Copy only the allowed fields (Model(title=data["title"], body=data["body"])), or validate
+      the body with a schema that lists the allowed fields (a pydantic model, a DRF serializer
+      with explicit fields, a Django ModelForm with fields = [...]).
+    sources:
+      - https://cwe.mitre.org/data/definitions/915.html
+      - https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html
+      - https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/
+
+  - id: CG-LGC-007
+    title: Session or auth cookie sent without the Secure flag
+    cwe: CWE-614
+    message: >-
+      A session or login cookie is set without the Secure flag (or the app turns it off), so
+      the browser also sends it over plain HTTP, where anyone on the network can read it.
+    fix_hint: >-
+      Set SESSION_COOKIE_SECURE = True, and pass secure=True (plus httponly=True and
+      samesite="Lax") to set_cookie() for any login or token cookie.
+    sources:
+      - https://cwe.mitre.org/data/definitions/614.html
+      - https://flask.palletsprojects.com/en/stable/web-security/#set-cookie-options
+      - https://docs.djangoproject.com/en/stable/ref/settings/#session-cookie-secure
+      - https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
+    patterns:
+      - assign: ["flask.Flask().config[SESSION_COOKIE_SECURE]", "flask.Flask().config[REMEMBER_COOKIE_SECURE]"]
+        value_is: false
+      - assign: [SESSION_COOKIE_SECURE, CSRF_COOKIE_SECURE]
+        value_is: false
+        files: ["settings.py", "*/settings.py", "settings/*.py", "*/settings/*.py"]
+      - call: ["flask.Flask().config.update", "flask.Flask().config.from_mapping"]
+        where:
+          - arg: SESSION_COOKIE_SECURE
+            is: false
+      - call: "*.set_cookie"
+        where:
+          - arg: key
+            position: 0
+            matches: "session|token|auth|jwt|sid|remember"
+          - arg: secure
+            not_true: true
+
+  - id: CG-LGC-008
+    title: Session or auth cookie readable by JavaScript (no HttpOnly flag)
+    cwe: CWE-1004
+    message: >-
+      A session or login cookie is set without the HttpOnly flag (or the app turns it off), so
+      any script on the page, including one injected through XSS, can read and steal it.
+    fix_hint: >-
+      Keep SESSION_COOKIE_HTTPONLY = True (the default) and pass httponly=True to set_cookie()
+      for any login or token cookie.
+    sources:
+      - https://cwe.mitre.org/data/definitions/1004.html
+      - https://flask.palletsprojects.com/en/stable/web-security/#set-cookie-options
+      - https://docs.djangoproject.com/en/stable/ref/settings/#session-cookie-httponly
+      - https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie
+    patterns:
+      - assign: "flask.Flask().config[SESSION_COOKIE_HTTPONLY]"
+        value_is: false
+      - assign: SESSION_COOKIE_HTTPONLY
+        value_is: false
+        files: ["settings.py", "*/settings.py", "settings/*.py", "*/settings/*.py"]
+      - call: ["flask.Flask().config.update", "flask.Flask().config.from_mapping"]
+        where:
+          - arg: SESSION_COOKIE_HTTPONLY
+            is: false
+      - call: "*.set_cookie"
+        where:
+          - arg: key
+            position: 0
+            matches: "session|token|auth|jwt|sid|remember"
+          - arg: httponly
+            not_true: true
+
+  - id: CG-LGC-009
+    title: CORS allows every origin together with credentials
+    cwe: CWE-942
+    check: cors_wildcard_credentials
+    message: >-
+      Cross-origin requests are allowed from any website ("*") and with credentials (cookies).
+      The CORS library then sends back the caller's own origin, so any website a logged-in user
+      visits can read this API's answers in their name.
+    fix_hint: >-
+      List the exact origins that may call the API (allow_origins=["https://app.example.com"]),
+      or turn credentials off if the API does not use cookies.
+    sources:
+      - https://cwe.mitre.org/data/definitions/942.html
+      - https://fetch.spec.whatwg.org/#cors-protocol-and-credentials
+      - https://www.starlette.io/middleware/#corsmiddleware
+      - https://fastapi.tiangolo.com/tutorial/cors/
+      - https://flask-cors.readthedocs.io/en/latest/api.html
+      - https://github.com/adamchainz/django-cors-headers
+
+  - id: CG-LGC-010
+    title: Writable REST API view set open to everyone
+    cwe: CWE-306
+    check: drf_open_viewset
+    message: >-
+      This Django REST framework view set can create, change and delete objects, and its
+      permission is AllowAny (or no permission is set and the project has no default). Anyone
+      can change or delete the data.
+    fix_hint: >-
+      Set permission_classes = [IsAuthenticated] (or a stricter permission) on the view set, or
+      set DEFAULT_PERMISSION_CLASSES in the REST_FRAMEWORK settings.
+    sources:
+      - https://cwe.mitre.org/data/definitions/306.html
+      - https://www.django-rest-framework.org/api-guide/permissions/#setting-the-permission-policy
+      - https://www.django-rest-framework.org/api-guide/permissions/#allowany

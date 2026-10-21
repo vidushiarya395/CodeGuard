@@ -1,0 +1,257 @@
+# Dangerous sinks for the taint check (detector "taint", no AI). Inputs, sanitizers and
+# validators are in taint.yaml.
+#
+# A finding is reported when input of one of the kinds in "from" reaches one of the listed
+# arguments of a sink call, inside one function or one hop into a helper in the same file.
+# Each pattern:
+#   call:    full dotted names, resolved the same way as the other AST rules ("*" = anything)
+#   args:    argument positions that must not carry input (0 = first)
+#   kwargs:  keyword argument names that must not carry input
+#   where:   extra conditions on the call (same format as deprecated_apis.yaml), e.g. shell=True
+# html_only:     only report when the input is built into text holding an HTML tag
+# flask_return:  also check what a Flask view returns (Flask sends a returned str as text/html)
+#
+# Web-only sinks (SSRF, redirects, file paths, HTML) ignore command-line input: the person
+# running a CLI tool may already fetch any URL or open any of their own files.
+#
+# The same list will be used by the Verifier to tell when two findings point at the same call.
+# Sources for every rule: docs/RULE_SOURCES.md
+
+version: 1
+
+rules:
+  - id: CG-TNT-001
+    title: OS command built from user input
+    cwe: CWE-78
+    from: [web, cli, stdin]
+    message: >-
+      User input reaches a function that runs its argument through the system shell. Characters
+      such as ; | & or $( ) in the input let an attacker run any command they choose.
+    fix_hint: >-
+      Pass the program and its arguments as a list without a shell, e.g.
+      subprocess.run(["ping", "-c", "1", host]). If a shell is truly needed, quote every value
+      with shlex.quote().
+    sources:
+      - https://cwe.mitre.org/data/definitions/78.html
+      - https://docs.python.org/3/library/subprocess.html#security-considerations
+      - https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html
+    patterns:
+      - call: [os.system, os.popen, subprocess.getoutput, subprocess.getstatusoutput]
+        args: [0]
+        kwargs: [cmd, command]
+      - call: [subprocess.call, subprocess.run, subprocess.Popen, subprocess.check_call, subprocess.check_output]
+        args: [0]
+        kwargs: [args]
+        where:
+          - arg: shell
+            is: true
+
+  - id: CG-TNT-002
+    title: Python code run from user input
+    cwe: CWE-95
+    from: [web, cli, stdin]
+    message: >-
+      User input reaches eval(), exec() or compile(), which run it as Python code. An attacker
+      can run any code with the program's permissions.
+    fix_hint: >-
+      Do not run input as code. To read a literal value use ast.literal_eval(); for arithmetic,
+      parse the expression yourself or use a small allow-listed parser.
+    sources:
+      - https://cwe.mitre.org/data/definitions/95.html
+      - https://docs.python.org/3/library/functions.html#eval
+      - https://docs.python.org/3/library/ast.html#ast.literal_eval
+    patterns:
+      - call: [eval, exec, compile, builtins.eval, builtins.exec]
+        args: [0]
+        kwargs: [source]
+
+  - id: CG-TNT-003
+    title: SQL query built from user input
+    cwe: CWE-89
+    from: [web, cli, stdin]
+    message: >-
+      User input is part of the SQL text sent to the database. Quotes in the input change the
+      query, so an attacker can read, change or delete other data.
+    fix_hint: >-
+      Keep the SQL text fixed and pass values separately as query parameters, e.g.
+      cursor.execute("SELECT * FROM users WHERE name = ?", (name,)).
+    sources:
+      - https://cwe.mitre.org/data/definitions/89.html
+      - https://peps.python.org/pep-0249/#paramstyle
+      - https://docs.python.org/3/library/sqlite3.html#sqlite3-placeholders
+      - https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+    patterns:
+      - call: ["*.execute", "*.executemany", "*.executescript", "*.objects.raw", "*.objects.extra"]
+        args: [0]
+        kwargs: [sql, query, operation]
+      - call: [sqlalchemy.text, sqlalchemy.sql.text, sqlalchemy.sql.expression.text, pandas.read_sql, pandas.read_sql_query]
+        args: [0]
+        kwargs: [text, sql]
+
+  - id: CG-TNT-004
+    title: File path built from user input
+    cwe: CWE-22
+    from: [web]
+    message: >-
+      A file path that comes from the request is opened, sent or deleted. With "../" in the
+      name an attacker can reach files outside the intended folder.
+    fix_hint: >-
+      Do not use names from the request as paths. Use werkzeug.utils.secure_filename() or
+      os.path.basename(), or flask.send_from_directory(), and check that the final path is
+      inside the allowed folder.
+    sources:
+      - https://cwe.mitre.org/data/definitions/22.html
+      - https://owasp.org/www-community/attacks/Path_Traversal
+      - https://flask.palletsprojects.com/en/stable/api/#flask.send_file
+    patterns:
+      - call: [open, builtins.open, io.open, codecs.open, flask.send_file, os.remove, os.unlink, shutil.rmtree, django.http.FileResponse]
+        args: [0]
+        kwargs: [file, filename, path, path_or_file]
+
+  - id: CG-TNT-005
+    title: Server-side request to a user-supplied URL
+    cwe: CWE-918
+    from: [web]
+    message: >-
+      The server fetches a URL taken from the request. An attacker can make it call internal
+      services, cloud metadata addresses or other hosts the attacker cannot reach directly.
+    fix_hint: >-
+      Do not fetch arbitrary URLs. Allow only known hosts (compare the parsed host with a fixed
+      list) and block private and link-local addresses.
+    sources:
+      - https://cwe.mitre.org/data/definitions/918.html
+      - https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
+    patterns:
+      - call:
+          - requests.get
+          - requests.post
+          - requests.put
+          - requests.patch
+          - requests.delete
+          - requests.head
+          - requests.options
+          - "requests.Session().get"
+          - "requests.Session().post"
+          - httpx.get
+          - httpx.post
+          - "httpx.Client().get"
+          - "httpx.AsyncClient().get"
+          - urllib.request.urlopen
+          - urllib.request.Request
+        args: [0]
+        kwargs: [url]
+      - call: [requests.request, "requests.Session().request", httpx.request]
+        args: [1]
+        kwargs: [url]
+
+  - id: CG-TNT-006
+    title: Redirect to a user-supplied URL
+    cwe: CWE-601
+    from: [web]
+    message: >-
+      The response redirects to an address taken from the request. An attacker can send
+      victims a link to this site that forwards them to a phishing page.
+    fix_hint: >-
+      Redirect only to fixed internal routes (url_for(...)), or check the target with
+      url_has_allowed_host_and_scheme() / a fixed allow list before redirecting.
+    sources:
+      - https://cwe.mitre.org/data/definitions/601.html
+      - https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html
+    patterns:
+      - call:
+          - flask.redirect
+          - werkzeug.utils.redirect
+          - django.shortcuts.redirect
+          - django.http.HttpResponseRedirect
+          - django.http.HttpResponsePermanentRedirect
+          - fastapi.responses.RedirectResponse
+          - starlette.responses.RedirectResponse
+        args: [0]
+        kwargs: [location, to, redirect_to, url]
+
+  - id: CG-TNT-007
+    title: Template built from user input
+    cwe: CWE-1336
+    from: [web]
+    message: >-
+      User input becomes part of a Jinja template's source. Template syntax such as {{ ... }}
+      in the input is executed on the server and can lead to remote code execution.
+    fix_hint: >-
+      Keep templates fixed (render_template("page.html", name=name)) and pass user input only
+      as template variables, which Jinja escapes.
+    sources:
+      - https://cwe.mitre.org/data/definitions/1336.html
+      - https://portswigger.net/web-security/server-side-template-injection
+      - https://jinja.palletsprojects.com/en/stable/sandbox/
+    patterns:
+      - call: [flask.render_template_string, jinja2.Template, "jinja2.Environment().from_string"]
+        args: [0]
+        kwargs: [source]
+
+  - id: CG-TNT-008
+    title: User input marked as safe HTML
+    cwe: CWE-79
+    from: [web]
+    message: >-
+      User input is wrapped in Markup() / mark_safe(), which tells the template engine not to
+      escape it. Script tags in the input then run in other users' browsers.
+    fix_hint: >-
+      Do not mark user input as safe. Let the template escape it, or escape it first with
+      markupsafe.escape() and only then combine it with trusted HTML.
+    sources:
+      - https://cwe.mitre.org/data/definitions/79.html
+      - https://docs.djangoproject.com/en/stable/ref/utils/#django.utils.safestring.mark_safe
+      - https://markupsafe.palletsprojects.com/en/stable/
+      - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+    patterns:
+      - call: [markupsafe.Markup, flask.Markup, jinja2.Markup, django.utils.safestring.mark_safe, django.utils.safestring.SafeString]
+        args: [0]
+        kwargs: [base]
+
+  - id: CG-TNT-009
+    title: HTML page built from user input
+    cwe: CWE-79
+    from: [web]
+    html_only: true
+    flask_return: true
+    message: >-
+      User input is pasted into HTML text that is sent to the browser without escaping. Script
+      tags in the input run in the browser of anyone who opens the page.
+    fix_hint: >-
+      Render a template (render_template / Django templates escape by default), or escape the
+      value with markupsafe.escape() / html.escape() before building the HTML.
+    sources:
+      - https://cwe.mitre.org/data/definitions/79.html
+      - https://flask.palletsprojects.com/en/stable/quickstart/#about-responses
+      - https://docs.djangoproject.com/en/stable/ref/request-response/#httpresponse-objects
+      - https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+    patterns:
+      - call: [flask.make_response, flask.Response, django.http.HttpResponse, fastapi.responses.HTMLResponse, starlette.responses.HTMLResponse]
+        args: [0]
+        kwargs: [response, content]
+
+  - id: CG-TNT-010
+    title: Untrusted data deserialized
+    cwe: CWE-502
+    from: [web, cli, stdin]
+    message: >-
+      Data from outside is loaded with pickle (or a YAML loader that can build any object).
+      Loading crafted data runs code chosen by whoever made it.
+    fix_hint: >-
+      Use a data-only format such as json.loads() or yaml.safe_load(). Never unpickle data you
+      did not create yourself; if you must, sign it and check the signature first.
+    sources:
+      - https://cwe.mitre.org/data/definitions/502.html
+      - https://docs.python.org/3/library/pickle.html
+      - https://github.com/yaml/pyyaml/wiki/PyYAML-yaml.load(input)-Deprecation
+    patterns:
+      - call: [pickle.loads, pickle.load, _pickle.loads, cPickle.loads, dill.loads, marshal.loads, jsonpickle.decode, yaml.unsafe_load]
+        args: [0]
+        kwargs: [data, stream, string]
+      - call: [yaml.load, yaml.load_all]
+        args: [0]
+        kwargs: [stream]
+        where:
+          - arg: Loader
+            position: 1
+            missing_or_not_in: [yaml.SafeLoader, yaml.CSafeLoader]

@@ -1,0 +1,53 @@
+app: flask_blog
+description: Flask blog with accounts (Flask-Login, SQLAlchemy), in the style an AI assistant typically writes.
+
+# The real vulnerabilities in this app. Line = where the problem is (the def line for a route).
+vulnerabilities:
+  - file: app.py
+    line: 13
+    cwe: CWE-798
+    what: Hard-coded Flask SECRET_KEY (anyone who reads the code can forge session cookies).
+  - file: app.py
+    line: 42
+    cwe: CWE-916
+    also_cwe: [CWE-327, CWE-328]
+    what: Passwords hashed with unsalted MD5 (CWE-916; tools often label weak hashes CWE-327/328).
+  - file: app.py
+    line: 114
+    cwe: CWE-639
+    what: Any logged-in user can delete any post; the author is never checked.
+  - file: app.py
+    line: 124
+    cwe: CWE-89
+    what: Search query built with an f-string from the q parameter.
+  - file: app.py
+    line: 131
+    cwe: CWE-862
+    what: Admin "ban user" action checks the login but not that the user is an admin.
+  - file: app.py
+    line: 141
+    cwe: CWE-489
+    what: Flask debug mode (interactive debugger) turned on.
+
+# Lines where a finding of this CWE would be a false alarm.
+quiet:
+  - file: app.py
+    line: 63
+    cwe: CWE-306
+    why: The login route is public by design.
+  - file: app.py
+    line: 52
+    cwe: CWE-306
+    why: The register route is public by design.
+  - file: app.py
+    line: 82
+    cwe: CWE-639
+    why: Posts are public; viewing any post by id is intended.
+  - file: app.py
+    line: 90
+    cwe: CWE-915
+    why: Only named fields are copied from the form; the author comes from the session.
+  - file: app.py
+    line: 100
+    cwe: CWE-639
+    why: edit_post compares the author with current_user before changing anything.

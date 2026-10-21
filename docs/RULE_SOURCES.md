@@ -93,11 +93,83 @@ libraries (requests, Flask, FastAPI, pydantic, pygments, ...) and reading every 
 false alarm found that way has a regression test in `backend/tests/test_secrets.py` or
 `backend/tests/test_packages.py`.
 
+## Logic flaws (`rules/logic_flaws.yaml`)
+
+These rules look at what a web route does and whether anything protects it, using the Code
+Reader's facts (routes, decorators, parameters; `backend/codeguard/reader/`). The checks are in
+`backend/codeguard/rulechecks/logic.py`. They stay quiet when the evidence is unclear: anything
+that looks like a login or permission check (a decorator, a FastAPI dependency, `current_user`,
+a session check, `abort(401/403)`, class-level `permission_classes`, a `before_request` hook)
+counts as protection.
+
+| Rule | What it catches | CWE | Sources |
+|------|-----------------|-----|---------|
+| CG-LGC-001 | A route with no login or permission check that deletes data, has a sensitive name or URL (`admin`, `delete`, `export` ...), or changes data while other routes of the same app require a login. Public routes (`login`, `register`, `webhook` ...) are skipped | CWE-306 | MITRE CWE-306: https://cwe.mitre.org/data/definitions/306.html <br> OWASP API Security 2023, API2 Broken Authentication: https://owasp.org/API-Security/editions/2023/en/0xa2-broken-authentication/ <br> OWASP Authentication Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html <br> Flask-Login, protecting views: https://flask-login.readthedocs.io/en/latest/#protecting-views <br> Django, login_required: https://docs.djangoproject.com/en/stable/topics/auth/default/#the-login-required-decorator <br> FastAPI security: https://fastapi.tiangolo.com/tutorial/security/ |
+| CG-LGC-002 | An admin-looking route (`admin`, `promote`, `set_role` ...) that checks the login but no role or permission | CWE-862 | MITRE CWE-862: https://cwe.mitre.org/data/definitions/862.html <br> OWASP API Security 2023, API5 Broken Function Level Authorization: https://owasp.org/API-Security/editions/2023/en/0xa5-broken-function-level-authorization/ <br> OWASP Authorization Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html |
+| CG-LGC-003 | A logged-in route that loads an object by an id from the URL or request (`Post.query.get_or_404(post_id)`) and never ties it to the current user (IDOR) | CWE-639 | MITRE CWE-639: https://cwe.mitre.org/data/definitions/639.html <br> OWASP API Security 2023, API1 Broken Object Level Authorization: https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/ <br> OWASP IDOR Prevention Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Insecure_Direct_Object_Reference_Prevention_Cheat_Sheet.html |
+| CG-LGC-004 | An uploaded file (`request.files`, `request.FILES`, FastAPI `UploadFile`) saved with no extension or type check | CWE-434 | MITRE CWE-434: https://cwe.mitre.org/data/definitions/434.html <br> OWASP File Upload Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html <br> Flask docs, uploading files: https://flask.palletsprojects.com/en/stable/patterns/fileuploads/ |
+| CG-LGC-005 | CSRF turned off: `@csrf_exempt`, `@csrf.exempt` (Flask-WTF), `app.config["WTF_CSRF_ENABLED"] = False` | CWE-352 | MITRE CWE-352: https://cwe.mitre.org/data/definitions/352.html <br> OWASP CSRF Prevention Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html <br> Django CSRF docs: https://docs.djangoproject.com/en/stable/ref/csrf/ <br> Flask-WTF CSRF: https://flask-wtf.readthedocs.io/en/stable/csrf/ <br> Flask-WTF configuration: https://flask-wtf.readthedocs.io/en/stable/config/ |
+| CG-LGC-006 | The whole request body unpacked into a model or update call (`User(**request.get_json())`, `Model.objects.create(**request.POST.dict())`, `setattr` for every key) | CWE-915 | MITRE CWE-915: https://cwe.mitre.org/data/definitions/915.html <br> OWASP Mass Assignment Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html <br> OWASP API Security 2023, API3 Broken Object Property Level Authorization: https://owasp.org/API-Security/editions/2023/en/0xa3-broken-object-property-level-authorization/ |
+| CG-LGC-007 | `SESSION_COOKIE_SECURE = False` (Flask config or Django settings), or `set_cookie()` of a session/token cookie without `secure=True` | CWE-614 | MITRE CWE-614: https://cwe.mitre.org/data/definitions/614.html <br> Flask docs, Set-Cookie options: https://flask.palletsprojects.com/en/stable/web-security/#set-cookie-options <br> Django settings, SESSION_COOKIE_SECURE: https://docs.djangoproject.com/en/stable/ref/settings/#session-cookie-secure <br> OWASP Session Management Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html |
+| CG-LGC-008 | `SESSION_COOKIE_HTTPONLY = False`, or `set_cookie()` of a session/token cookie without `httponly=True` | CWE-1004 | MITRE CWE-1004: https://cwe.mitre.org/data/definitions/1004.html <br> Flask docs, Set-Cookie options: https://flask.palletsprojects.com/en/stable/web-security/#set-cookie-options <br> Django settings, SESSION_COOKIE_HTTPONLY: https://docs.djangoproject.com/en/stable/ref/settings/#session-cookie-httponly <br> MDN, Set-Cookie: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Set-Cookie |
+| CG-LGC-009 | CORS that allows every origin together with credentials: Starlette/FastAPI `CORSMiddleware(allow_origins=["*"], allow_credentials=True)`, Flask-CORS `supports_credentials=True` with all origins, django-cors-headers `CORS_ALLOW_ALL_ORIGINS` with `CORS_ALLOW_CREDENTIALS` | CWE-942 | MITRE CWE-942: https://cwe.mitre.org/data/definitions/942.html <br> Fetch standard, CORS and credentials: https://fetch.spec.whatwg.org/#cors-protocol-and-credentials <br> Starlette CORSMiddleware: https://www.starlette.io/middleware/#corsmiddleware <br> FastAPI CORS: https://fastapi.tiangolo.com/tutorial/cors/ <br> Flask-CORS API: https://flask-cors.readthedocs.io/en/latest/api.html <br> django-cors-headers: https://github.com/adamchainz/django-cors-headers |
+| CG-LGC-010 | A writable Django REST framework view set with `permission_classes = [AllowAny]`, or with no permission when the scanned settings set no `DEFAULT_PERMISSION_CLASSES` (DRF then allows anyone) | CWE-306 | MITRE CWE-306: https://cwe.mitre.org/data/definitions/306.html <br> DRF, setting the permission policy: https://www.django-rest-framework.org/api-guide/permissions/#setting-the-permission-policy <br> DRF, AllowAny: https://www.django-rest-framework.org/api-guide/permissions/#allowany |
+
+CWE-639 and CWE-942 are not in `rules/cwe_groups.yaml`. As that file says, a CWE that is not
+listed becomes its own one-CWE group, so these findings are never merged with anything else.
+The JWT case (decoding without verifying the signature) is covered by CG-SET-005.
+
+## Taint check (`rules/sinks.yaml`, `rules/taint.yaml`)
+
+Its own detector, `taint` (no AI). It follows user input inside one function, plus one hop into a
+helper function in the same file, and reports when the input reaches a dangerous call. The
+evidence is the path, e.g. `line 18: host = request.args.get("host") [input] -> line 19: cmd = f"ping {host}" -> line 20: subprocess.run(cmd, shell=True) [sink]`.
+The code is in `backend/codeguard/rulechecks/taint.py`. Each sink has one vulnerable and one
+safe example in `backend/tests/examples/taint/<RULE-ID>/`.
+
+### Sinks (`rules/sinks.yaml`)
+
+| Rule | Sink | Input counted | CWE | Sources |
+|------|------|---------------|-----|---------|
+| CG-TNT-001 | `os.system`, `os.popen`, `subprocess.*` with `shell=True` | web, cli, stdin | CWE-78 | MITRE CWE-78: https://cwe.mitre.org/data/definitions/78.html <br> Python docs, subprocess security considerations: https://docs.python.org/3/library/subprocess.html#security-considerations <br> OWASP OS Command Injection Defense Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html |
+| CG-TNT-002 | `eval`, `exec`, `compile` | web, cli, stdin | CWE-95 | MITRE CWE-95: https://cwe.mitre.org/data/definitions/95.html <br> Python docs, eval: https://docs.python.org/3/library/functions.html#eval <br> Python docs, ast.literal_eval: https://docs.python.org/3/library/ast.html#ast.literal_eval |
+| CG-TNT-003 | The SQL text of `cursor.execute` and similar, `sqlalchemy.text`, Django `objects.raw` / `extra`, `pandas.read_sql` (query parameters are not checked: they are the safe way) | web, cli, stdin | CWE-89 | MITRE CWE-89: https://cwe.mitre.org/data/definitions/89.html <br> PEP 249, paramstyle: https://peps.python.org/pep-0249/#paramstyle <br> Python docs, sqlite3 placeholders: https://docs.python.org/3/library/sqlite3.html#sqlite3-placeholders <br> OWASP SQL Injection Prevention Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html |
+| CG-TNT-004 | `open`, `flask.send_file`, `os.remove`, `shutil.rmtree`, `FileResponse` | web | CWE-22 | MITRE CWE-22: https://cwe.mitre.org/data/definitions/22.html <br> OWASP Path Traversal: https://owasp.org/www-community/attacks/Path_Traversal <br> Flask docs, send_file: https://flask.palletsprojects.com/en/stable/api/#flask.send_file |
+| CG-TNT-005 | `requests.*`, `httpx.*`, `urllib.request.urlopen` (the URL) | web | CWE-918 | MITRE CWE-918: https://cwe.mitre.org/data/definitions/918.html <br> OWASP SSRF Prevention Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html |
+| CG-TNT-006 | `flask.redirect`, Django `redirect` / `HttpResponseRedirect`, FastAPI / Starlette `RedirectResponse` | web | CWE-601 | MITRE CWE-601: https://cwe.mitre.org/data/definitions/601.html <br> OWASP Unvalidated Redirects and Forwards Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html |
+| CG-TNT-007 | `render_template_string`, `jinja2.Template`, `Environment().from_string` (the template source) | web | CWE-1336 | MITRE CWE-1336: https://cwe.mitre.org/data/definitions/1336.html <br> PortSwigger, server-side template injection: https://portswigger.net/web-security/server-side-template-injection <br> Jinja sandbox docs: https://jinja.palletsprojects.com/en/stable/sandbox/ |
+| CG-TNT-008 | `Markup`, `mark_safe`, `SafeString` | web | CWE-79 | MITRE CWE-79: https://cwe.mitre.org/data/definitions/79.html <br> Django docs, mark_safe: https://docs.djangoproject.com/en/stable/ref/utils/#django.utils.safestring.mark_safe <br> MarkupSafe docs: https://markupsafe.palletsprojects.com/en/stable/ <br> OWASP XSS Prevention Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html |
+| CG-TNT-009 | HTML text built from input and returned from a Flask view, or passed to `make_response` / `HttpResponse` / `HTMLResponse` (only when the text holds an HTML tag) | web | CWE-79 | MITRE CWE-79: https://cwe.mitre.org/data/definitions/79.html <br> Flask quickstart, about responses (a returned string is sent as text/html): https://flask.palletsprojects.com/en/stable/quickstart/#about-responses <br> Django docs, HttpResponse: https://docs.djangoproject.com/en/stable/ref/request-response/#httpresponse-objects <br> OWASP XSS Prevention Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html |
+| CG-TNT-010 | `pickle.loads` / `load`, `marshal.loads`, `dill.loads`, `jsonpickle.decode`, `yaml.unsafe_load`, `yaml.load` without a safe loader | web, cli, stdin | CWE-502 | MITRE CWE-502: https://cwe.mitre.org/data/definitions/502.html <br> Python docs, pickle (warning): https://docs.python.org/3/library/pickle.html <br> PyYAML, yaml.load(input) deprecation: https://github.com/yaml/pyyaml/wiki/PyYAML-yaml.load(input)-Deprecation |
+
+Web-only sinks ignore command-line input: the person running a CLI tool may already fetch any
+URL or open any of their own files, so reporting it would be noise.
+
+### Inputs, sanitizers and validators (`rules/taint.yaml`)
+
+| Entry | What it is | Sources |
+|-------|-----------|---------|
+| flask-request | `request.args`, `form`, `json`, `files`, `cookies`, `headers` ... (web) | Flask API, Request: https://flask.palletsprojects.com/en/stable/api/#flask.Request <br> OWASP Input Validation Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html |
+| request-parameter | `request.GET`, `POST`, `body`, `FILES`, `data`, `query_params`, `json()` ... of a Django, DRF, FastAPI or Starlette view (web) | Django request and response objects: https://docs.djangoproject.com/en/stable/ref/request-response/ <br> DRF requests: https://www.django-rest-framework.org/api-guide/requests/ <br> Starlette requests: https://www.starlette.io/requests/ |
+| route-parameter | Parameters of a route function: URL variables, FastAPI query and body parameters (web). FastAPI `Depends(...)` parameters and framework types (`Request`, `Session` ...) are not input | Flask, variable rules: https://flask.palletsprojects.com/en/stable/quickstart/#variable-rules <br> FastAPI path parameters: https://fastapi.tiangolo.com/tutorial/path-params/ <br> FastAPI query parameters: https://fastapi.tiangolo.com/tutorial/query-params/ <br> Django URL dispatcher: https://docs.djangoproject.com/en/stable/topics/http/urls/ |
+| stdin | `input()`, `sys.stdin` | Python docs, input: https://docs.python.org/3/library/functions.html#input |
+| command-line | `sys.argv`, `argparse` / `optparse` results, `click` options and arguments (cli) | Python docs, sys.argv: https://docs.python.org/3/library/sys.html#sys.argv <br> Python docs, argparse: https://docs.python.org/3/library/argparse.html <br> Click options: https://click.palletsprojects.com/en/stable/options/ |
+| environment | `os.environ`, `os.getenv`: listed as entry points only, not followed | Python docs, os.environ: https://docs.python.org/3/library/os.html#os.environ |
+| file-read | `open()`, `Path.read_text()`: listed as entry points only, not followed | Python docs, open: https://docs.python.org/3/library/functions.html#open |
+| Sanitizer: `int`, `float`, `bool`, `uuid.UUID`, `Decimal` | Safe for every sink | Python docs, int: https://docs.python.org/3/library/functions.html#int <br> OWASP Input Validation Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html |
+| Sanitizer: `shlex.quote` | Safe for OS commands | Python docs, shlex.quote: https://docs.python.org/3/library/shlex.html#shlex.quote |
+| Sanitizer: `html.escape`, `markupsafe.escape`, Django `escape`, `bleach.clean` | Safe for HTML | Python docs, html.escape: https://docs.python.org/3/library/html.html#html.escape <br> MarkupSafe escaping: https://markupsafe.palletsprojects.com/en/stable/escaping/ <br> Django docs, escape: https://docs.djangoproject.com/en/stable/ref/utils/#django.utils.html.escape |
+| Sanitizer: `os.path.basename`, `secure_filename` | Safe for file paths | Python docs, os.path.basename: https://docs.python.org/3/library/os.path.html#os.path.basename <br> Werkzeug, secure_filename: https://werkzeug.palletsprojects.com/en/stable/utils/#werkzeug.utils.secure_filename |
+| Sanitizer: `ast.literal_eval` | Safe for code evaluation | Python docs, ast.literal_eval: https://docs.python.org/3/library/ast.html#ast.literal_eval |
+| Validators | An `if` that checks the value (`x in ALLOWED`, `re.fullmatch(...)`, `x.isdigit()`, `allowed_file(x)`, `url_has_allowed_host_and_scheme(...)`) and leaves the function when it fails | OWASP Input Validation Cheat Sheet: https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html <br> Python docs, re.fullmatch: https://docs.python.org/3/library/re.html#re.fullmatch <br> Python docs, PurePath.is_relative_to: https://docs.python.org/3/library/pathlib.html#pathlib.PurePath.is_relative_to |
+
 ## LLM checklist review (`rules/checklist.yaml`)
 
-The AI part of Agent 2. The reviewer model answers every item for each Python file with yes/no,
-the line number(s) and a reason, as JSON that CodeGuard validates. A "yes" pointing to a line that
-does not exist is rejected. Each item maps to one CWE in `rules/cwe_groups.yaml`.
+The AI part of Agent 2. The reviewer model answers every item for each review unit (a small
+file, or a function / class of a bigger one, with the file's imports and constants as context)
+with yes/no, the line number(s) and a reason, as JSON that CodeGuard validates. A "yes" pointing
+to a line that does not exist, or was not shown in that unit, is rejected. Each item maps to one
+CWE in `rules/cwe_groups.yaml`.
 
 | Item | What it asks about | CWE | Sources |
 |------|--------------------|-----|---------|

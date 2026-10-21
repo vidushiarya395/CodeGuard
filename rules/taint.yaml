@@ -1,0 +1,192 @@
+# Taint check (detector "taint", no AI): where user input enters, what makes it safe, and what
+# passes it on. The sinks (where input must not arrive) are in sinks.yaml.
+#
+# The check follows input inside one function, plus one hop into a helper function defined in
+# the same file. It reads the code with Python's ast module and never runs it.
+#
+# sources:      where input enters. kind says who controls it:
+#                 web    anyone on the internet (request data, route parameters)
+#                 cli    the person running a command-line tool (sys.argv, argparse, click)
+#                 stdin  the person typing at input()
+#                 env    whoever starts the program (environment variables)
+#                 file   whatever is in a file the program reads
+#               Sources with taint: false are only listed by the Code Reader as entry points;
+#               they are not followed (the environment and local files are normally controlled
+#               by the person running the program, so following them would mostly add noise).
+# sanitizers:   calls whose result is safe for the listed CWE groups (or "all").
+# propagators:  calls whose result carries the input on (os.path.join(base, name) is still the
+#               user's name). Method calls on a value that carries input (name.strip(),
+#               data.get("x")) always carry it on; other calls do not, so the check stays quiet
+#               when it cannot tell (db.session.get(Post, post_id) is not user input).
+# validators:   an "if" test that calls one of these on the value (or compares it with a fixed
+#               set of allowed values) and leaves the function when the check fails counts as
+#               validation: the value is treated as safe after it.
+#
+# Sources for every entry: docs/RULE_SOURCES.md
+
+version: 1
+
+sources:
+  - id: flask-request
+    kind: web
+    title: Flask request data
+    names:
+      - flask.request.args
+      - flask.request.form
+      - flask.request.values
+      - flask.request.json
+      - flask.request.get_json
+      - flask.request.data
+      - flask.request.get_data
+      - flask.request.files
+      - flask.request.cookies
+      - flask.request.headers
+      - flask.request.view_args
+      - flask.request.url
+      - flask.request.full_path
+      - flask.request.path
+      - flask.request.query_string
+      - flask.request.referrer
+      - flask.request.stream
+    whole_body:
+      - flask.request.json
+      - flask.request.get_json
+      - flask.request.form
+      - flask.request.values
+      - flask.request.args
+    sources:
+      - https://flask.palletsprojects.com/en/stable/api/#flask.Request
+      - https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html
+
+  - id: request-parameter
+    kind: web
+    title: Request data of a Django, DRF, FastAPI or Starlette view
+    request_param: [GET, POST, body, FILES, COOKIES, META, headers, data, query_params, path_params, json, form, cookies]
+    whole_body: [GET, POST, data, json, form, query_params]
+    sources:
+      - https://docs.djangoproject.com/en/stable/ref/request-response/
+      - https://www.django-rest-framework.org/api-guide/requests/
+      - https://www.starlette.io/requests/
+
+  - id: route-parameter
+    kind: web
+    title: Route parameter (part of the URL, query string or request body)
+    route_params: true
+    sources:
+      - https://flask.palletsprojects.com/en/stable/quickstart/#variable-rules
+      - https://fastapi.tiangolo.com/tutorial/path-params/
+      - https://fastapi.tiangolo.com/tutorial/query-params/
+      - https://docs.djangoproject.com/en/stable/topics/http/urls/
+
+  - id: stdin
+    kind: stdin
+    title: Text typed at input()
+    names: [input, builtins.input, sys.stdin]
+    sources:
+      - https://docs.python.org/3/library/functions.html#input
+
+  - id: command-line
+    kind: cli
+    title: Command-line argument
+    names:
+      - sys.argv
+      - argparse.ArgumentParser().parse_args
+      - argparse.ArgumentParser().parse_known_args
+      - optparse.OptionParser().parse_args
+    param_decorators: [click.option, click.argument, "click.*.option", "click.*.argument"]
+    sources:
+      - https://docs.python.org/3/library/sys.html#sys.argv
+      - https://docs.python.org/3/library/argparse.html
+      - https://click.palletsprojects.com/en/stable/options/
+
+  - id: environment
+    kind: env
+    title: Environment variable
+    taint: false
+    names: [os.environ, os.getenv, os.environ.get, os.getenvb]
+    sources:
+      - https://docs.python.org/3/library/os.html#os.environ
+
+  - id: file-read
+    kind: file
+    title: File contents
+    taint: false
+    names: [open, builtins.open, io.open, "pathlib.Path().read_text", "pathlib.Path().read_bytes"]
+    sources:
+      - https://docs.python.org/3/library/functions.html#open
+
+sanitizers:
+  - call: [int, float, bool, complex, uuid.UUID, decimal.Decimal]
+    clears: [all]
+    sources:
+      - https://docs.python.org/3/library/functions.html#int
+      - https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html
+  - call: [shlex.quote, pipes.quote]
+    clears: [os-command-injection]
+    sources:
+      - https://docs.python.org/3/library/shlex.html#shlex.quote
+  - call: [html.escape, markupsafe.escape, flask.escape, django.utils.html.escape, bleach.clean]
+    clears: [xss]
+    sources:
+      - https://docs.python.org/3/library/html.html#html.escape
+      - https://markupsafe.palletsprojects.com/en/stable/escaping/
+      - https://docs.djangoproject.com/en/stable/ref/utils/#django.utils.html.escape
+  - call: [os.path.basename, werkzeug.utils.secure_filename, werkzeug.secure_filename]
+    clears: [path-traversal]
+    sources:
+      - https://docs.python.org/3/library/os.path.html#os.path.basename
+      - https://werkzeug.palletsprojects.com/en/stable/utils/#werkzeug.utils.secure_filename
+  - call: [ast.literal_eval]
+    clears: [code-injection]
+    sources:
+      - https://docs.python.org/3/library/ast.html#ast.literal_eval
+
+propagators:
+  - str
+  - repr
+  - bytes
+  - bytearray
+  - format
+  - dict
+  - list
+  - tuple
+  - set
+  - sorted
+  - os.path.join
+  - posixpath.join
+  - ntpath.join
+  - os.path.normpath
+  - os.path.abspath
+  - os.path.realpath
+  - os.path.expanduser
+  - pathlib.Path
+  - pathlib.PurePath
+  - urllib.parse.urljoin
+  - urllib.parse.urlparse
+  - urllib.parse.urlsplit
+  - urllib.parse.unquote
+  - urllib.parse.unquote_plus
+  - base64.b64decode
+  - base64.urlsafe_b64decode
+  - base64.b64encode
+  - binascii.unhexlify
+  - bytes.fromhex
+  - codecs.decode
+  - json.loads
+  - json.dumps
+  - textwrap.dedent
+
+validators:
+  call:
+    - re.match
+    - re.fullmatch
+    - "re.compile().match"
+    - "re.compile().fullmatch"
+    - django.utils.http.url_has_allowed_host_and_scheme
+    - os.path.commonpath
+  # Method or helper names that check a value: name.isdigit(), allowed_file(name), is_safe_url(url).
+  name_regex: "^(isdigit|isdecimal|isnumeric|isalnum|isalpha|isidentifier|is_relative_to|(is_)?(allowed|valid|safe)\\w*|validate\\w*)$"
+  sources:
+    - https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html
+    - https://docs.python.org/3/library/re.html#re.fullmatch
+    - https://docs.python.org/3/library/pathlib.html#pathlib.PurePath.is_relative_to

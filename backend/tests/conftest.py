@@ -48,6 +48,10 @@ from codeguard.rulechecks.netclient import NetworkDown, canonical_name  # noqa: 
 KNOWN_PACKAGES = {
     "requests", "opencv-python", "pyyaml", "flask", "paramiko", "pyjwt", "pycryptodome",
     "jinja2", "boto3", "psycopg2",
+    # web frameworks used by the logic-flaw and taint examples
+    "django", "djangorestframework", "django-cors-headers", "fastapi", "starlette", "pydantic",
+    "sqlalchemy", "flask-login", "flask-sqlalchemy", "flask-wtf", "flask-cors", "werkzeug",
+    "markupsafe", "click",
 }  # fmt: skip
 FAKE_ADVISORY = {"id": "GHSA-test-0001", "summary": "Example advisory (test data)", "aliases": ["CVE-2000-0001"]}
 

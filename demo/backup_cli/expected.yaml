@@ -1,0 +1,30 @@
+app: backup_cli
+description: Command-line backup tool (argparse, subprocess, YAML config).
+
+vulnerabilities:
+  - file: backup.py
+    line: 22
+    cwe: CWE-502
+    what: The config file is loaded with yaml.Loader, which can build arbitrary Python objects.
+  - file: backup.py
+    line: 31
+    cwe: CWE-95
+    what: The --filter option is run with eval().
+  - file: backup.py
+    line: 39
+    cwe: CWE-78
+    what: The tar command is built from the source and --output arguments and run with shell=True.
+  - file: backup.py
+    line: 47
+    cwe: CWE-377
+    what: tempfile.mktemp() (race between choosing and creating the file).
+
+quiet:
+  - file: backup.py
+    line: 43
+    cwe: CWE-78
+    why: rsync is run with an argument list and no shell.
+  - file: backup.py
+    line: 21
+    cwe: CWE-22
+    why: A CLI user may open any of their own files; this is not path traversal.

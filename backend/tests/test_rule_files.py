@@ -19,7 +19,7 @@ def test_every_rule_has_https_sources(rulebook):
 
 def test_every_rule_is_documented_with_its_sources(rulebook):
     doc = RULE_SOURCES.read_text(encoding="utf-8")
-    for rule in rulebook.all_rules():
+    for rule in [*rulebook.all_rules(), *rulebook.taint_rules()]:
         assert rule.id in doc, f"{rule.id} is missing from docs/RULE_SOURCES.md"
         assert rule.cwe in doc, f"{rule.cwe} ({rule.id}) is missing from docs/RULE_SOURCES.md"
         for src in rule.sources:
@@ -28,11 +28,28 @@ def test_every_rule_is_documented_with_its_sources(rulebook):
         assert pattern.name in doc, pattern.name
         for src in pattern.sources:
             assert src in doc, f"source of token pattern '{pattern.name}' missing: {src}"
+    taint = rulebook.taint
+    for entry in [*taint.sources, *taint.sanitizers, taint.validators]:
+        for src in entry.sources:
+            assert src in doc, f"source of a rules/taint.yaml entry missing from docs/RULE_SOURCES.md: {src}"
+    for source in taint.sources:
+        assert source.id in doc, f"taint source '{source.id}' is missing from docs/RULE_SOURCES.md"
+
+
+# CWEs that rules use but rules/cwe_groups.yaml does not list. As that file says, each becomes its
+# own one-CWE group. The groups were frozen for the benchmark, so they were not edited (Phase 5A).
+OWN_GROUP_CWES = {
+    "CWE-639": "IDOR (CG-LGC-003); no narrow group for it exists",
+    "CWE-942": "permissive CORS (CG-LGC-009); no narrow group for it exists",
+}
 
 
 def test_every_rule_cwe_has_a_named_group(rulebook):
     groups = get_cwe_groups()
-    for rule in rulebook.all_rules():
+    for rule in [*rulebook.all_rules(), *rulebook.taint_rules()]:
+        if rule.cwe in OWN_GROUP_CWES:
+            assert groups.group_of(rule.cwe) == rule.cwe  # its own group, never merged with another
+            continue
         assert rule.cwe in groups.by_cwe, f"{rule.id}: {rule.cwe} is not in rules/cwe_groups.yaml"
 
 

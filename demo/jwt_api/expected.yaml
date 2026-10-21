@@ -1,0 +1,46 @@
+app: jwt_api
+description: Flask user API with JWT tokens (PyJWT), a token_required decorator and SQLAlchemy.
+
+vulnerabilities:
+  - file: app.py
+    line: 13
+    cwe: CWE-798
+    what: Hard-coded JWT signing secret.
+  - file: app.py
+    line: 40
+    cwe: CWE-347
+    what: Tokens are decoded with verify_signature False, so anyone can forge a token for any user.
+  - file: app.py
+    line: 53
+    cwe: CWE-915
+    what: The whole JSON body goes into User(**data), so a user can register with role "admin".
+  - file: app.py
+    line: 66
+    cwe: CWE-614
+    what: The access token cookie has no Secure flag.
+  - file: app.py
+    line: 66
+    cwe: CWE-1004
+    what: The access token cookie has no HttpOnly flag.
+  - file: app.py
+    line: 79
+    cwe: CWE-639
+    what: Any logged-in user can read any other user's profile by id.
+  - file: app.py
+    line: 85
+    cwe: CWE-862
+    what: The admin user list only checks for a token, not for the admin role.
+
+quiet:
+  - file: app.py
+    line: 60
+    cwe: CWE-306
+    why: The login route is public by design.
+  - file: app.py
+    line: 50
+    cwe: CWE-306
+    why: The register route is public by design.
+  - file: app.py
+    line: 72
+    cwe: CWE-639
+    why: /me only returns the logged-in user.

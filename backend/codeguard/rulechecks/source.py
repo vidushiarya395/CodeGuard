@@ -13,6 +13,7 @@ from codeguard.cwe import CweGroups
 from codeguard.models import Detector, Evidence, Finding
 from codeguard.rulechecks.loader import RuleMeta
 from codeguard.scanners.base import MAX_EVIDENCE_LINES, SKIP_DIRS
+from codeguard.textio import read_source
 
 MAX_FILE_BYTES = 2_000_000
 
@@ -78,10 +79,12 @@ def load_sources(path: Path, display_name: str | None = None) -> SourceSet:
             if file.stat().st_size > MAX_FILE_BYTES:
                 out.errors.append(f"{rel}: skipped (larger than {MAX_FILE_BYTES // 1_000_000} MB)")
                 continue
-            text = file.read_text(encoding="utf-8", errors="replace")
+            text, note = read_source(file)
         except OSError as exc:
             out.errors.append(f"{rel}: could not be read ({exc.strerror or exc})")
             continue
+        if note:
+            out.errors.append(f"{rel}: {note}")
 
         src = SourceFile(rel=rel, text=text, lines=text.splitlines())
         if is_py:
@@ -96,6 +99,9 @@ def load_sources(path: Path, display_name: str | None = None) -> SourceSet:
 
 def parse_python(text: str, rel: str, errors: list[str]) -> ast.Module | None:
     """Parse with ast (this never runs the code). Returns None if the file is not valid Python."""
+    if "\x00" in text:
+        errors.append(f"{rel}: contains null bytes (a binary file?); only text checks were run")
+        return None
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")  # e.g. SyntaxWarning for invalid escape sequences
@@ -103,6 +109,9 @@ def parse_python(text: str, rel: str, errors: list[str]) -> ast.Module | None:
     except (SyntaxError, ValueError) as exc:
         line = getattr(exc, "lineno", None)
         errors.append(f"{rel}: not valid Python{f' (line {line})' if line else ''}; only text checks were run")
+        return None
+    except (RecursionError, MemoryError):
+        errors.append(f"{rel}: nested too deeply to parse; only text checks were run")
         return None
 
 
@@ -118,10 +127,12 @@ def make_finding(
     matched_code: str | None = None,
     extra_refs: list[str] | None = None,
     extra_messages: list[str] | None = None,
+    detector: Detector = Detector.RULE_CHECK,
 ) -> Finding:
     line_start = max(line_start, 1)
     line_end = max(line_end, line_start)
-    message = f"[rule {rule.id}] {detail + ' ' if detail else ''}{rule.message}"
+    tag = "taint" if detector == Detector.TAINT else "rule"
+    message = f"[{tag} {rule.id}] {detail + ' ' if detail else ''}{rule.message}"
     evidence = Evidence(
         rule_ids=[rule.id],
         matched_code=matched_code if matched_code is not None else src.snippet(line_start, line_end),
@@ -135,7 +146,7 @@ def make_finding(
         cwe=rule.cwe,
         cwe_group=groups.group_of(rule.cwe),
         title=title or rule.title,
-        detectors=[Detector.RULE_CHECK],
+        detectors=[detector],
         evidence=evidence,
     )
 

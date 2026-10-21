@@ -24,6 +24,7 @@ class Detector(str, Enum):
     SEMGREP = "semgrep"
     BANDIT = "bandit"
     RULE_CHECK = "rule_check"
+    TAINT = "taint"  # user input followed to a dangerous call (no AI)
     LLM_CHECKLIST = "llm_checklist"
     LLM_OPEN = "llm_open"
 
@@ -128,3 +129,5 @@ class ScanResult(BaseModel):
     findings: list[Finding] = Field(default_factory=list)
     tool_runs: list[ToolRun] = Field(default_factory=list)
     duration_s: float = 0.0
+    # Things about the input itself, e.g. files left out of a zip archive.
+    notes: list[str] = Field(default_factory=list)

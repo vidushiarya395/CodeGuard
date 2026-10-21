@@ -1,0 +1,46 @@
+app: pastebin
+description: Flask pastebin clone with sqlite3, Flask-WTF and a preferences cookie. Public, no accounts.
+
+vulnerabilities:
+  - file: app.py
+    line: 13
+    cwe: CWE-352
+    what: CSRF protection switched off for the whole app (WTF_CSRF_ENABLED = False).
+  - file: app.py
+    line: 30
+    cwe: CWE-502
+    what: The prefs cookie is unpickled, so a crafted cookie runs code on the server.
+  - file: app.py
+    line: 60
+    cwe: CWE-79
+    what: Stored XSS; the raw view puts the paste's content into HTML without escaping.
+  - file: app.py
+    line: 66
+    cwe: CWE-1336
+    what: The preview builds a Jinja template from the user's text (server-side template injection).
+  - file: app.py
+    line: 74
+    cwe: CWE-79
+    what: Reflected XSS; the search term (and stored titles) are put into HTML without escaping.
+  - file: app.py
+    line: 80
+    cwe: CWE-601
+    what: Open redirect via the next parameter.
+
+quiet:
+  - file: app.py
+    line: 42
+    cwe: CWE-89
+    why: The INSERT uses query parameters.
+  - file: app.py
+    line: 72
+    cwe: CWE-89
+    why: The LIKE pattern is passed as a query parameter.
+  - file: app.py
+    line: 39
+    cwe: CWE-306
+    why: Anyone may create a paste on a public pastebin.
+  - file: app.py
+    line: 48
+    cwe: CWE-79
+    why: The paste page uses render_template, which escapes the content.

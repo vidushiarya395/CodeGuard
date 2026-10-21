@@ -1,0 +1,38 @@
+app: fastapi_todo
+description: Todo REST API with FastAPI, SQLAlchemy and pydantic. No login anywhere.
+
+vulnerabilities:
+  - file: main.py
+    line: 41
+    cwe: CWE-942
+    what: CORS allows every origin together with credentials.
+  - file: main.py
+    line: 74
+    cwe: CWE-89
+    what: Search query built with an f-string from the q parameter.
+  - file: main.py
+    line: 98
+    cwe: CWE-306
+    what: Anyone can delete any todo; DELETE has no authentication at all.
+  - file: main.py
+    line: 107
+    cwe: CWE-306
+    what: "/admin/reset deletes every todo and has no authentication."
+
+quiet:
+  - file: main.py
+    line: 65
+    cwe: CWE-915
+    why: Todo(**todo.dict()) only copies the fields of the TodoCreate pydantic model.
+  - file: main.py
+    line: 64
+    cwe: CWE-306
+    why: Creating a todo in an app without accounts is not a missing-authentication bug by itself.
+  - file: main.py
+    line: 87
+    cwe: CWE-915
+    why: The setattr loop only sees fields of the TodoUpdate pydantic model.
+  - file: main.py
+    line: 79
+    cwe: CWE-639
+    why: There are no users, so there is no other user's data to reach.

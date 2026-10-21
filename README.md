@@ -86,6 +86,8 @@ other local projects. The web app forwards `/api/...` calls to the API.
 .\.venv\Scripts\codeguard scan some_file.py --json
 .\.venv\Scripts\codeguard scan some_folder --offline   # never contact PyPI / OSV
 .\.venv\Scripts\codeguard scan some_file.py --no-llm   # no AI review (code stays on your laptop)
+.\.venv\Scripts\codeguard scan project.zip            # the .py files inside a zip (never run)
+.\.venv\Scripts\python.exe demo\run_demo.py           # demo suite: found / missed / extra per demo app
 .\.venv\Scripts\codeguard check-llm                     # test your AI key
 ```
 

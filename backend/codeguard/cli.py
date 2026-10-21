@@ -12,7 +12,7 @@ from rich.table import Table
 from codeguard import __version__
 from codeguard.config import get_settings
 from codeguard.models import ScanResult, ToolState
-from codeguard.scan import ScanInputError, scan_path
+from codeguard.scan import ScanInputError, scan_path, scan_zip
 
 app = typer.Typer(add_completion=False, help="CodeGuard: security checker for AI-generated Python code.")
 
@@ -38,7 +38,7 @@ def version() -> None:
 
 @app.command()
 def scan(
-    path: Path = typer.Argument(..., help="A Python file or a folder to scan."),
+    path: Path = typer.Argument(..., help="A Python file, a folder, or a .zip archive to scan."),
     json_output: bool = typer.Option(False, "--json", help="Print the full result as JSON instead of a table."),
     offline: bool = typer.Option(
         False, "--offline", help="Do not contact PyPI or OSV; package checks use cached answers only."
@@ -54,7 +54,10 @@ def scan(
     if no_llm:
         settings = replace(settings, llm_review=False)
     try:
-        result = scan_path(path, settings=settings)
+        if path.suffix.lower() == ".zip" and path.is_file():
+            result = scan_zip(path, settings=settings)
+        else:
+            result = scan_path(path, settings=settings)
     except ScanInputError as exc:
         Console(stderr=True).print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(code=2)
@@ -67,6 +70,8 @@ def scan(
 
 def print_result(result: ScanResult, console: Console) -> None:
     console.print(f"[bold]CodeGuard scan[/bold]  {result.target}  ({result.duration_s:.1f} s)")
+    for note in result.notes:
+        console.print(f"  {note}", style="dim", markup=False)
     for run in result.tool_runs:
         style = _STATE_STYLE.get(run.state, "white")
         version = f" {run.version}" if run.version else ""
