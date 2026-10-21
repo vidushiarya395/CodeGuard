@@ -37,12 +37,13 @@ USER_AGENT = f"CodeGuard/{__version__}"
 MAX_ERROR_CHARS = 300
 
 # Defaults for the free tiers. The providers change these from time to time, so every value can be
-# overridden in .env (GEMINI_MODEL, CODEGUARD_LLM_RPM, CODEGUARD_LLM_RPD, ...). The limits are set a
-# little below the published free-tier limits, so CodeGuard slows itself down before the provider
-# starts refusing requests. Check the current limits in Google AI Studio and the Groq console.
+# overridden in .env (GEMINI_MODEL, GEMINI_RPD, CODEGUARD_LLM_RPM, CODEGUARD_LLM_RPD, ...). The limits
+# are set a little below the published free-tier limits, so CodeGuard slows itself down before the
+# provider starts refusing requests. Check the current limits in Google AI Studio and the Groq console.
+# The Gemini 2.5 Flash free tier allows about 20 requests per day.
 GEMINI_DEFAULT_MODEL = "gemini-2.5-flash"
-GEMINI_RPM, GEMINI_RPD = 8, 200
-GROQ_DEFAULT_MODEL = "llama-3.3-70b-versatile"
+GEMINI_RPM, GEMINI_RPD = 8, 18
+GROQ_DEFAULT_MODEL = "openai/gpt-oss-120b"
 GROQ_RPM, GROQ_RPD = 25, 900
 OLLAMA_DEFAULT_MODEL = "qwen2.5-coder:7b"
 
@@ -139,7 +140,7 @@ class GeminiProvider:
     name = "gemini"
     default_rpm, default_rpd = GEMINI_RPM, GEMINI_RPD
 
-    def __init__(self, api_key: str, model: str = "", timeout_s: float = 90):
+    def __init__(self, api_key: str, model: str = "", timeout_s: float = 90, rpd: int = 0):
         if not api_key:
             raise LLMUnavailable(
                 "No GEMINI_API_KEY is set. Get a free key at https://aistudio.google.com/apikey and put it in .env"
@@ -147,6 +148,8 @@ class GeminiProvider:
         self._key = api_key
         self.model = model or GEMINI_DEFAULT_MODEL
         self.timeout_s = timeout_s
+        if rpd > 0:
+            self.default_rpd = rpd
 
     def __repr__(self) -> str:
         return f"GeminiProvider(model={self.model!r})"
@@ -258,7 +261,7 @@ def build_provider(settings: Settings) -> Provider:
     """The provider chosen in .env (LLM_PROVIDER). Raises LLMUnavailable if it cannot be used."""
     name = settings.llm_provider
     if name == "gemini":
-        return GeminiProvider(settings.gemini_api_key, settings.gemini_model, settings.llm_timeout_s)
+        return GeminiProvider(settings.gemini_api_key, settings.gemini_model, settings.llm_timeout_s, settings.gemini_rpd)
     if name == "groq":
         return GroqProvider(settings.groq_api_key, settings.groq_model, settings.llm_timeout_s)
     if name == "ollama":

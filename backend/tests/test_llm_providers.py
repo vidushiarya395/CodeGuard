@@ -158,6 +158,19 @@ def test_build_provider_follows_settings():
         build_provider(replace(s, llm_provider="openai"))
 
 
+def test_gemini_daily_limit_default_and_override():
+    assert GeminiProvider(FAKE_KEY).default_rpd == 18
+    assert GeminiProvider(FAKE_KEY, rpd=5).default_rpd == 5
+    s = replace(Settings(), llm_provider="gemini", gemini_api_key=FAKE_KEY)
+    assert build_provider(replace(s, gemini_rpd=0)).default_rpd == 18
+    assert build_provider(replace(s, gemini_rpd=12)).default_rpd == 12
+
+
+def test_gemini_rpd_is_read_from_env(monkeypatch):
+    monkeypatch.setenv("GEMINI_RPD", "7")
+    assert Settings().gemini_rpd == 7
+
+
 def test_keys_never_show_in_repr():
     s = replace(Settings(), gemini_api_key=FAKE_KEY, groq_api_key=FAKE_KEY)
     assert FAKE_KEY not in repr(s)

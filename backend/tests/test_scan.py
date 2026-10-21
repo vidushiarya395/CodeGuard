@@ -6,6 +6,7 @@ from typer.testing import CliRunner
 from codeguard import api, scan
 from codeguard.agents.ai_mistake_finder import ALL_CHECKS
 from codeguard.cli import app as cli_app
+from codeguard.config import DEFAULT_SEMGREP_CONFIGS, Settings
 from codeguard.models import Detector, ToolState
 from codeguard.scanners.semgrep import build_command
 
@@ -42,8 +43,25 @@ def test_pasted_file_name_is_its_own_module(monkeypatch):
 
 def test_semgrep_does_not_skip_test_folders():
     # Regression: Semgrep's default ignore list silently skipped every tests/ folder.
-    cmd = build_command("semgrep", type("S", (), {"semgrep_config": "p/python"})(), type("T", (), {"arg": "."})())
+    cmd = build_command("semgrep", type("S", (), {"semgrep_configs": ("p/python",)})(), type("T", (), {"arg": "."})())
     assert "--x-ignore-semgrepignore-files" in cmd and "--no-git-ignore" in cmd
+
+
+def test_semgrep_gets_one_config_flag_per_pack():
+    packs = ("p/python", "p/flask", "p/jwt")
+    cmd = build_command("semgrep", type("S", (), {"semgrep_configs": packs})(), type("T", (), {"arg": "."})())
+    assert [cmd[i + 1] for i, a in enumerate(cmd) if a == "--config"] == list(packs)
+
+
+def test_semgrep_pack_list_comes_from_env(monkeypatch):
+    monkeypatch.delenv("CODEGUARD_SEMGREP_CONFIG", raising=False)
+    monkeypatch.delenv("CODEGUARD_SEMGREP_CONFIGS", raising=False)
+    assert Settings().semgrep_configs == DEFAULT_SEMGREP_CONFIGS
+    assert "p/security-audit" in DEFAULT_SEMGREP_CONFIGS and "p/sql-injection" in DEFAULT_SEMGREP_CONFIGS
+    monkeypatch.setenv("CODEGUARD_SEMGREP_CONFIG", "p/python")
+    assert Settings().semgrep_configs == ("p/python",)
+    monkeypatch.setenv("CODEGUARD_SEMGREP_CONFIGS", " p/flask, p/jwt ,,p/flask")
+    assert Settings().semgrep_configs == ("p/flask", "p/jwt")
 
 
 def test_api_returns_rule_findings(monkeypatch):

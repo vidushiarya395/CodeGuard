@@ -1,6 +1,6 @@
 """Agent 1: Standard Scanner (no AI).
 
-Runs Semgrep (p/python) and Bandit side by side and collects their findings unchanged.
+Runs Semgrep (the configured rule packs) and Bandit side by side and collects their findings unchanged.
 It does not merge, de-duplicate or rank findings; that is the Verifier's job (Agent 3).
 """
 

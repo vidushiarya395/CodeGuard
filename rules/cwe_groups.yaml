@@ -182,3 +182,18 @@ groups:
     name: Missing or disabled signature verification
     cwes: [CWE-347]
     source: https://cwe.mitre.org/data/definitions/347.html
+
+  - id: missing-authentication
+    name: Missing authentication for a critical function
+    cwes: [CWE-306]
+    source: https://cwe.mitre.org/data/definitions/306.html
+
+  - id: missing-authorization
+    name: Missing authorization check
+    cwes: [CWE-862]
+    source: https://cwe.mitre.org/data/definitions/862.html
+
+  - id: unrestricted-upload
+    name: Unrestricted file upload
+    cwes: [CWE-434]
+    source: https://cwe.mitre.org/data/definitions/434.html

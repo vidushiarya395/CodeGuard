@@ -1,4 +1,4 @@
-"""Semgrep Community Edition runner (ruleset p/python by default)."""
+"""Semgrep Community Edition runner (the rule packs in CODEGUARD_SEMGREP_CONFIGS, see config.py)."""
 
 from __future__ import annotations
 
@@ -48,11 +48,10 @@ def find_semgrep(settings: Settings) -> str | None:
 
 
 def build_command(exe: str, settings: Settings, target: ScanTarget) -> list[str]:
-    cmd = [
-        exe,
-        "scan",
-        "--config",
-        settings.semgrep_config,
+    cmd = [exe, "scan"]
+    for pack in settings.semgrep_configs:
+        cmd += ["--config", pack]
+    cmd += [
         "--json",
         "--quiet",
         "--metrics=off",
@@ -111,7 +110,7 @@ def parse_semgrep_output(
         detail = last_lines(stderr) or last_lines(stdout) or "no output"
         hint = ""
         if any(w in (stderr + stdout).lower() for w in ("download", "connection", "network", "resolve", "registry")):
-            hint = " Semgrep needs internet access to download its rules (p/python) from the Semgrep registry."
+            hint = " Semgrep needs internet access to download its rule packs from the Semgrep registry."
         return failed_run(TOOL, f"Semgrep failed (exit code {returncode}): {detail}.{hint}", version, duration_s)
 
     file_errors: list[str] = []

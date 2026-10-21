@@ -34,6 +34,27 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+# Free Semgrep Community rule packs from the Semgrep registry (https://semgrep.dev/explore).
+DEFAULT_SEMGREP_CONFIGS = (
+    "p/python",
+    "p/security-audit",
+    "p/owasp-top-ten",
+    "p/flask",
+    "p/django",
+    "p/jwt",
+    "p/command-injection",
+    "p/sql-injection",
+)
+
+
+def _semgrep_configs() -> tuple[str, ...]:
+    """CODEGUARD_SEMGREP_CONFIGS (comma-separated). The older single-pack setting
+    CODEGUARD_SEMGREP_CONFIG is still honoured when the new one is not set."""
+    raw = os.getenv("CODEGUARD_SEMGREP_CONFIGS", "").strip() or os.getenv("CODEGUARD_SEMGREP_CONFIG", "").strip()
+    packs = tuple(dict.fromkeys(p.strip() for p in raw.split(",") if p.strip()))
+    return packs or DEFAULT_SEMGREP_CONFIGS
+
+
 @dataclass(frozen=True)
 class Settings:
     rules_dir: Path = field(
@@ -41,9 +62,8 @@ class Settings:
     )
     # Optional explicit path to the semgrep executable. Empty = auto-detect.
     semgrep_path: str = field(default_factory=lambda: os.getenv("CODEGUARD_SEMGREP_PATH", "").strip())
-    semgrep_config: str = field(
-        default_factory=lambda: os.getenv("CODEGUARD_SEMGREP_CONFIG", "p/python").strip() or "p/python"
-    )
+    # Semgrep rule packs, run together in one Semgrep call.
+    semgrep_configs: tuple[str, ...] = field(default_factory=lambda: _semgrep_configs())
     scanner_timeout_s: int = field(default_factory=lambda: _int_env("CODEGUARD_SCANNER_TIMEOUT", 120))
     max_paste_lines: int = field(default_factory=lambda: _int_env("CODEGUARD_MAX_PASTE_LINES", 2000))
     # PyPI and OSV answers are cached here.
@@ -57,6 +77,8 @@ class Settings:
     llm_provider: str = field(default_factory=lambda: os.getenv("LLM_PROVIDER", "gemini").strip().lower() or "gemini")
     gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", "").strip(), repr=False)
     gemini_model: str = field(default_factory=lambda: os.getenv("GEMINI_MODEL", "").strip())
+    # Gemini requests per day. 0 = the default in codeguard/llm/providers.py (18, just under the free ~20).
+    gemini_rpd: int = field(default_factory=lambda: _int_env("GEMINI_RPD", 0))
     groq_api_key: str = field(default_factory=lambda: os.getenv("GROQ_API_KEY", "").strip(), repr=False)
     groq_model: str = field(default_factory=lambda: os.getenv("GROQ_MODEL", "").strip())
     ollama_base_url: str = field(

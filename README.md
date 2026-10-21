@@ -23,7 +23,7 @@ CodeGuard only **reads** code; it never runs the code it scans.
 
 - **Python 3.11 or newer** (`python --version`)
 - **Node.js LTS** (`node --version`, v22 or newer)
-- Internet the first time Semgrep runs a scan (it downloads the `p/python` rules), and for the
+- Internet the first time Semgrep runs a scan (it downloads its rule packs, see `CODEGUARD_SEMGREP_CONFIGS` in `.env.example`), and for the
   package checks (PyPI and OSV). Without internet those checks are marked `skipped`; everything
   else still runs.
 

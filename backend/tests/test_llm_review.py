@@ -67,10 +67,10 @@ def test_yes_answer_becomes_a_finding_with_evidence(app_file, make_llm, groups):
     assert sql.detectors == [Detector.LLM_CHECKLIST]
     assert "db.execute" in sql.evidence.matched_code
     assert sql.evidence.llm_reasons == ["reason CG-CHK-002"]
-    assert any("fake/fake-model" in m and "checklist-v1" in m for m in sql.evidence.messages)
+    assert any("fake/fake-model" in m and "checklist-v2" in m for m in sql.evidence.messages)
     assert sql.confidence is None  # set later by the Verifier
     usage = chk.run.llm
-    assert (usage.provider, usage.model, usage.prompt_version, usage.calls) == ("fake", "fake-model", "checklist-v1", 1)
+    assert (usage.provider, usage.model, usage.prompt_version, usage.calls) == ("fake", "fake-model", "checklist-v2", 1)
 
 
 def test_neighbouring_lines_make_one_finding(app_file, make_llm, groups):
@@ -111,7 +111,7 @@ def test_open_question_findings_are_always_low_confidence(app_file, make_llm, gr
         {"line": 9, "line_end": 8, "cwe": "CWE-20", "title": "Backwards", "reason": "bad range"},
     ]}  # fmt: skip
     opn = review(app_file, make_llm(respond_by_task(checklist_json(), json.dumps(issues))), groups)[OPEN_QUESTION]
-    assert [(f.line_start, f.cwe, f.cwe_group) for f in opn.findings] == [(4, "CWE-306", "CWE-306"), (5, "CWE-89", "sql-injection")]
+    assert [(f.line_start, f.cwe, f.cwe_group) for f in opn.findings] == [(4, "CWE-306", "missing-authentication"), (5, "CWE-89", "sql-injection")]
     assert all(f.confidence == Confidence.LOW and f.detectors == [Detector.LLM_OPEN] for f in opn.findings)
     assert any("line 77 does not exist" in n for n in opn.run.notes)
     assert any("line_end 8 is before line 9" in n for n in opn.run.notes)

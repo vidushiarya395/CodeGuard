@@ -24,8 +24,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from codeguard.llm.checklist import ChecklistItem
 from codeguard.llm.client import Prompt
 
-CHECKLIST_PROMPT_VERSION = "checklist-v1"
-OPEN_QUESTION_PROMPT_VERSION = "open-question-v1"
+CHECKLIST_PROMPT_VERSION = "checklist-v2"
+OPEN_QUESTION_PROMPT_VERSION = "open-question-v2"
 
 MAX_LINES_PER_ANSWER = 5
 MAX_OPEN_ISSUES = 5
